@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTheme } from "next-themes";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,10 +10,12 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Settings as SettingsIcon, User, Bell, Lock, Globe, Database } from "lucide-react";
+import { Settings as SettingsIcon, User, Bell, Lock, Globe, Database, Upload } from "lucide-react";
 import { getSettings, createSetting, updateSetting } from "@/lib/data";
 import { getApiBase } from "@/lib/utils";
 import type { Settings as SettingsType } from "@/lib/types";
+import { useNotifications } from "@/lib/context/notification-context";
+import Image from "next/image";
 import JSZip from "jszip";
 
 interface SettingsData {
@@ -32,11 +34,159 @@ interface SettingsData {
   language: string;
   backupLocation: string;
   dataRetention: string;
+  logo?: string;
 }
+
+// Add custom type for directory input
+interface DirectoryInputElement extends HTMLInputElement {
+  webkitdirectory: boolean;
+  directory: boolean;
+}
+
+// Add type declaration for showDirectoryPicker
+declare global {
+  interface Window {
+    showDirectoryPicker(): Promise<FileSystemDirectoryHandle>;
+  }
+}
+
+interface FileSystemDirectoryHandle {
+  name: string;
+}
+
+// Custom folder input component
+const FolderInput = ({ onFolderSelect }: { onFolderSelect: (path: string) => void }) => {
+  const [selectedPath, setSelectedPath] = useState('');
+
+  const handleFolderSelect = async () => {
+    try {
+      // Create a directory picker
+      const dirHandle = await window.showDirectoryPicker();
+      const path = dirHandle.name;
+      
+      // Update the UI
+      setSelectedPath(path);
+      onFolderSelect(path);
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
+        console.error('Error selecting folder:', error);
+        toast.error("Failed to select folder");
+      }
+    }
+  };
+
+  return (
+    <div className="flex gap-2">
+      <Input 
+        placeholder="Select backup folder"
+        value={selectedPath}
+        readOnly
+      />
+      <Button 
+        variant="outline" 
+        onClick={handleFolderSelect}
+      >
+        Select Folder
+      </Button>
+    </div>
+  );
+};
+
+// Helper function to handle folder selection and backup
+const handleFolderSelectionAndBackup = async (folderName: string) => {
+  try {
+    // Save the backup location setting
+    await createSetting({
+      setting_key: 'backup_location',
+      value: folderName,
+      type: 'string',
+      description: 'Backup location path',
+      isEncrypted: false
+    });
+
+    // Update local state
+    setSettings(prev => ({ ...prev, backupLocation: folderName }));
+
+    // Create initial backup
+    setIsBackingUp(true);
+    try {
+      // Fetch data from API
+      const response = await fetch(`${getApiBase()}/api/db?action=export-database`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch data');
+      }
+      const data = await response.json();
+
+      // Create a new zip file
+      const zip = new JSZip();
+
+      // Convert products to CSV
+      const productsCsv = convertToCSV(data.products, [
+        'id', 'name', 'description', 'category', 'price', 'stock', 'minStock', 'supplier', 'createdAt', 'updatedAt'
+      ]);
+      zip.file('inventory.csv', productsCsv);
+
+      // Convert sales to CSV
+      const salesCsv = convertToCSV(data.sales, [
+        'id', 'productId', 'productName', 'quantity', 'price', 'total', 'date', 'customer'
+      ]);
+      zip.file('sales.csv', salesCsv);
+
+      // Generate zip file
+      const content = await zip.generateAsync({ type: 'blob' });
+      const timestamp = new Date().toISOString().split('T')[0];
+      const zipFileName = `database-backup-${timestamp}.zip`;
+
+      // Save the zip file
+      const formData = new FormData();
+      formData.append('backup', content, zipFileName);
+      formData.append('location', folderName);
+
+      const saveResponse = await fetch(`${getApiBase()}/api/db?action=save-backup`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!saveResponse.ok) {
+        const errorData = await saveResponse.json();
+        throw new Error(errorData.error || 'Failed to save backup');
+      }
+
+      // Update last backup time
+      setLastBackupTime(new Date().toISOString());
+      toast.success("Backup created successfully");
+    } catch (error: any) {
+      console.error('Error creating backup:', error);
+      toast.error(error instanceof Error ? error.message : "Failed to create backup");
+    } finally {
+      setIsBackingUp(false);
+    }
+    
+    toast.success("Backup location updated successfully");
+  } catch (error: any) {
+    console.error('Error saving backup location:', error);
+    toast.error("Failed to save backup location");
+  }
+};
+
+// Helper function to convert data to CSV
+const convertToCSV = (data: any[], headers: string[]) => {
+  const headerRow = headers.join(',');
+  const rows = data.map(item => 
+    headers.map(header => {
+      const value = item[header];
+      // Handle values that might contain commas
+      return typeof value === 'string' && value.includes(',') ? `"${value}"` : value;
+    }).join(',')
+  );
+  return [headerRow, ...rows].join('\n');
+};
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const [isSaving, setIsSaving] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [lastBackupTime, setLastBackupTime] = useState<string | null>(null);
   const [settings, setSettings] = useState<SettingsData>({
     companyName: "",
     currency: "inr",
@@ -52,8 +202,14 @@ export default function SettingsPage() {
     theme: theme || "system",
     language: "en",
     backupLocation: "",
-    dataRetention: "30"
+    dataRetention: "30",
+    logo: ""
   });
+  const { addNotification } = useNotifications();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Add new state for backup
+  const [selectedPath, setSelectedPath] = useState('');
 
   useEffect(() => {
     const initializeSettings = async () => {
@@ -109,6 +265,7 @@ export default function SettingsPage() {
           case 'language': settingsData.language = value as string; break;
           case 'backup_location': settingsData.backupLocation = value as string; break;
           case 'data_retention': settingsData.dataRetention = value as string; break;
+          case 'logo': settingsData.logo = value as string; break;
         }
       });
 
@@ -139,7 +296,8 @@ export default function SettingsPage() {
         { setting_key: 'theme', value: settings.theme, type: 'string' as const, description: 'Application theme', isEncrypted: false },
         { setting_key: 'language', value: settings.language, type: 'string' as const, description: 'Application language', isEncrypted: false },
         { setting_key: 'backup_location', value: settings.backupLocation, type: 'string' as const, description: 'Backup location path', isEncrypted: false },
-        { setting_key: 'data_retention', value: settings.dataRetention, type: 'string' as const, description: 'Data retention period in days', isEncrypted: false }
+        { setting_key: 'data_retention', value: settings.dataRetention, type: 'string' as const, description: 'Data retention period in days', isEncrypted: false },
+        { setting_key: 'logo', value: settings.logo || '', type: 'string' as const, description: 'Company logo', isEncrypted: false }
       ];
 
       // First, try to create all settings
@@ -152,6 +310,13 @@ export default function SettingsPage() {
           await updateSetting(setting);
         }
       }
+
+      // Add notification for settings update
+      addNotification({
+        type: 'system',
+        title: 'Settings Updated',
+        message: 'Your application settings have been successfully updated.'
+      });
 
       // Reload settings after saving
       await loadSettings();
@@ -169,6 +334,27 @@ export default function SettingsPage() {
       setTheme(value as string);
     }
     setSettings(prev => ({ ...prev, [key]: value }));
+
+    // Add notification for important setting changes
+    if (key === 'emailNotifications' && value === true) {
+      addNotification({
+        type: 'system',
+        title: 'Email Notifications Enabled',
+        message: 'You will now receive email notifications for important updates.'
+      });
+    } else if (key === 'lowStockAlerts' && value === true) {
+      addNotification({
+        type: 'system',
+        title: 'Low Stock Alerts Enabled',
+        message: 'You will now receive notifications when products are running low on stock.'
+      });
+    } else if (key === 'salesReports' && value === true) {
+      addNotification({
+        type: 'system',
+        title: 'Sales Reports Enabled',
+        message: 'You will now receive daily sales reports.'
+      });
+    }
   };
 
   const handleExportDatabase = async () => {
@@ -208,18 +394,6 @@ export default function SettingsPage() {
       console.error('Error exporting database:', error);
       toast.error("Failed to export database");
     }
-  };
-
-  const convertToCSV = (data: any[], headers: string[]): string => {
-    const headerRow = headers.join(',');
-    const rows = data.map(item => 
-      headers.map(header => {
-        const value = item[header];
-        // Handle values that might contain commas
-        return typeof value === 'string' && value.includes(',') ? `"${value}"` : value;
-      }).join(',')
-    );
-    return [headerRow, ...rows].join('\n');
   };
 
   const handleImportDatabase = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -316,6 +490,116 @@ export default function SettingsPage() {
     }
   };
 
+  // Set up daily backup check
+  useEffect(() => {
+    if (!settings.autoBackup || !settings.backupLocation) {
+      return;
+    }
+
+    const checkAndPerformBackup = async () => {
+      try {
+        // Check if backup is needed
+        const response = await fetch(`${getApiBase()}/api/db?action=check-backup-status`);
+        if (!response.ok) {
+          throw new Error('Failed to check backup status');
+        }
+        const { needsBackup } = await response.json();
+        
+        if (needsBackup) {
+          await handleFolderSelect();
+        }
+      } catch (error) {
+        console.error('Error checking backup status:', error);
+      }
+    };
+
+    // Check immediately when component mounts
+    checkAndPerformBackup();
+
+    // Set up interval to check every hour
+    const interval = setInterval(checkAndPerformBackup, 60 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [settings.autoBackup, settings.backupLocation]);
+
+  const handleFolderSelect = async () => {
+    try {
+      // Create a temporary input element
+      const input = document.createElement('input');
+      input.type = 'file';
+      // @ts-ignore - webkitdirectory is a valid attribute
+      input.webkitdirectory = true;
+      
+      // Handle folder selection
+      input.onchange = async (e) => {
+        const files = (e.target as HTMLInputElement).files;
+        if (files && files.length > 0) {
+          // Get the folder path from the first file
+          const fullPath = files[0].webkitRelativePath;
+          const pathParts = fullPath.split('/');
+          const folderName = pathParts[0];
+          
+          // Update the UI
+          setSelectedPath(folderName);
+          
+          // Handle the backup
+          await handleFolderSelectionAndBackup(folderName);
+        } else {
+          toast.error("No folder selected");
+        }
+      };
+      
+      // Trigger the file dialog
+      input.click();
+    } catch (error: any) {
+      console.error('Error in folder selection:', error);
+      toast.error("Failed to select folder");
+    }
+  };
+
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Check file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+
+    // Check file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image size should be less than 2MB');
+      return;
+    }
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64String = e.target?.result as string;
+        setSettings(prev => ({ ...prev, logo: base64String }));
+        
+        // Save the logo setting
+        await updateSetting({
+          setting_key: 'logo',
+          value: base64String,
+          type: 'string',
+          description: 'Company logo'
+        });
+
+        addNotification({
+          type: 'system',
+          title: 'Logo Updated',
+          message: 'Company logo has been successfully updated.'
+        });
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Error uploading logo:', error);
+      toast.error('Failed to upload logo');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -362,6 +646,72 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Company Logo</Label>
+                <div className="flex items-center gap-4">
+                  <div className="relative w-20 h-20 rounded-full overflow-hidden border">
+                    {settings.logo ? (
+                      <Image
+                        src={settings.logo}
+                        alt="Company Logo"
+                        fill
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-muted">
+                        <User className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload Logo
+                    </Button>
+                    {settings.logo && (
+                      <Button
+                        variant="destructive"
+                        onClick={async () => {
+                          try {
+                            setSettings(prev => ({ ...prev, logo: '' }));
+                            await updateSetting({
+                              setting_key: 'logo',
+                              value: '',
+                              type: 'string',
+                              description: 'Company logo'
+                            });
+                            addNotification({
+                              type: 'system',
+                              title: 'Logo Removed',
+                              message: 'Company logo has been successfully removed.'
+                            });
+                            toast.success('Logo removed successfully');
+                          } catch (error) {
+                            console.error('Error removing logo:', error);
+                            toast.error('Failed to remove logo');
+                          }
+                        }}
+                      >
+                        Remove Logo
+                      </Button>
+                    )}
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      aria-label="Upload company logo"
+                    />
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Recommended size: 200x200px. Max size: 2MB
+                </p>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="company-name">Company Name</Label>
                 <Input 
@@ -615,19 +965,32 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <Switch 
-                  checked={settings.autoBackup}
-                  onCheckedChange={(checked) => handleInputChange('autoBackup', checked)}
+                  checked={false}
+                  onCheckedChange={() => {
+                    toast.info("Automatic backup feature coming soon!");
+                  }}
+                  disabled={true}
                 />
               </div>
               <div className="space-y-2">
                 <Label>Backup Location</Label>
-                <Input 
-                  placeholder="Enter backup location"
-                  value={settings.backupLocation}
-                  onChange={(e) => handleInputChange('backupLocation', e.target.value)}
-                />
+                <div className="flex gap-2">
+                  <Input 
+                    placeholder="Backup location will be available soon"
+                    value=""
+                    readOnly
+                    disabled={true}
+                  />
+                  <Button 
+                    variant="outline" 
+                    onClick={() => toast.info("Backup feature coming soon!")}
+                    disabled={true}
+                  >
+                    Select Folder
+                  </Button>
+                </div>
                 <p className="text-sm text-muted-foreground">
-                  Specify the directory where backups will be stored
+                  This feature is currently under development
                 </p>
               </div>
               <div className="space-y-2">

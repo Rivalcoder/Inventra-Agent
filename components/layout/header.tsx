@@ -2,25 +2,54 @@
 
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
-import { MoonIcon, SunIcon, BellIcon, UserIcon } from "lucide-react";
+import { MoonIcon, SunIcon, UserIcon, Building2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { updateSetting } from "@/lib/data";
+import { updateSetting, getSettings } from "@/lib/data";
 import { toast } from "sonner";
+import { NotificationDropdown } from "@/components/notifications/notification-dropdown";
+import Image from "next/image";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export default function Header() {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [logo, setLogo] = useState<string | null>(null);
+  const [companyName, setCompanyName] = useState<string>('');
 
   useEffect(() => {
     setMounted(true);
+    loadSettings();
   }, []);
+
+  const loadSettings = async () => {
+    try {
+      const settings = await getSettings();
+      const logoSetting = settings.find(s => s.setting_key === 'logo');
+      const companyNameSetting = settings.find(s => s.setting_key === 'company_name');
+      if (logoSetting?.value) {
+        setLogo(logoSetting.value);
+      }
+      if (companyNameSetting?.value) {
+        setCompanyName(companyNameSetting.value);
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  };
 
   const handleThemeChange = async (newTheme: string) => {
     try {
@@ -82,24 +111,55 @@ export default function Header() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="rounded-full"
-          aria-label="Notifications"
-        >
-          <BellIcon className="h-5 w-5" />
-          <span className="sr-only">Notifications</span>
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="rounded-full"
-          aria-label="User menu"
-        >
-          <UserIcon className="h-5 w-5" />
-          <span className="sr-only">User menu</span>
-        </Button>
+        <NotificationDropdown />
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full relative w-10 h-10"
+                    aria-label="User menu"
+                  >
+                    {logo ? (
+                      <Image
+                        src={logo}
+                        alt="Profile"
+                        fill
+                        className="object-cover rounded-full"
+                      />
+                    ) : (
+                      <UserIcon className="h-5 w-5" />
+                    )}
+                    <span className="sr-only">User menu</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">{companyName || 'Company Name'}</p>
+                      <p className="text-xs leading-none text-muted-foreground">
+                        {companyName ? 'Your Company' : 'Set company name in settings'}
+                      </p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href="/settings" className="flex items-center">
+                      <Building2 className="mr-2 h-4 w-4" />
+                      <span>Settings</span>
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{companyName || 'Set company name in settings'}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
     </header>
   );

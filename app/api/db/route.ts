@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import mysql from 'mysql2/promise';
 import { Product, Sale } from '@/lib/types';
+import { getPool } from "@/lib/db";
+import fs from "fs/promises";
+import path from "path";
 
 // Configure the route to be dynamic
 export const dynamic = 'force-dynamic';
@@ -537,6 +540,36 @@ export async function GET(request: Request) {
           salesConn.release();
         }
 
+      case 'check-backup-status':
+        try {
+          const [settings] = await pool.query<mysql.RowDataPacket[]>(
+            'SELECT value FROM settings WHERE setting_key = "auto_backup"'
+          );
+          
+          if (!settings.length || settings[0].value !== 'true') {
+            return NextResponse.json({ needsBackup: false });
+          }
+
+          // Get the last backup time
+          const [lastBackup] = await pool.query<mysql.RowDataPacket[]>(
+            'SELECT value FROM settings WHERE setting_key = "last_backup_time"'
+          );
+
+          if (!lastBackup.length) {
+            return NextResponse.json({ needsBackup: true });
+          }
+
+          const lastBackupTime = new Date(lastBackup[0].value);
+          const now = new Date();
+          const hoursSinceLastBackup = (now.getTime() - lastBackupTime.getTime()) / (1000 * 60 * 60);
+
+          // If it's been more than 24 hours since the last backup
+          return NextResponse.json({ needsBackup: hoursSinceLastBackup >= 24 });
+        } catch (error) {
+          console.error('Error checking backup status:', error);
+          return NextResponse.json({ error: 'Failed to check backup status' }, { status: 500 });
+        }
+
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
@@ -732,6 +765,125 @@ export async function POST(request: Request) {
           throw error;
         } finally {
           connection.release();
+        }
+
+      case 'save-backup':
+        try {
+          const formData = await request.formData();
+          const backup = formData.get('backup') as File;
+          const location = formData.get('location') as string;
+
+          if (!backup || !location) {
+            console.error('Missing backup file or location:', { backup: !!backup, location });
+            return new NextResponse(JSON.stringify({ 
+              error: 'Missing backup file or location' 
+            }), { 
+              status: 400,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+
+          // Validate backup location
+          if (!location.startsWith('/') && !location.match(/^[A-Za-z]:/)) {
+            console.error('Invalid backup location:', location);
+            return new NextResponse(JSON.stringify({ 
+              error: 'Invalid backup location. Must be an absolute path.' 
+            }), { 
+              status: 400,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+
+          try {
+            // Ensure the backup directory exists
+            await fs.mkdir(location, { recursive: true });
+            console.log('Backup directory created/verified:', location);
+          } catch (error) {
+            console.error('Error creating backup directory:', error);
+            return new NextResponse(JSON.stringify({ 
+              error: 'Failed to create backup directory' 
+            }), { 
+              status: 500,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+
+          try {
+            // Save the backup file
+            const buffer = Buffer.from(await backup.arrayBuffer());
+            const backupPath = path.join(location, backup.name);
+            await fs.writeFile(backupPath, buffer);
+            console.log('Backup file saved:', backupPath);
+          } catch (error) {
+            console.error('Error saving backup file:', error);
+            return new NextResponse(JSON.stringify({ 
+              error: 'Failed to save backup file' 
+            }), { 
+              status: 500,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+
+          try {
+            // Update the last backup time in the database
+            const pool = getPool();
+            await pool.query(
+              'INSERT INTO settings (setting_key, value, type, description, isEncrypted) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE value = ?',
+              ['last_backup_time', new Date().toISOString(), 'string', 'Last automatic backup time', false, new Date().toISOString()]
+            );
+            console.log('Last backup time updated in database');
+          } catch (error) {
+            console.error('Error updating last backup time:', error);
+            // Don't return error here as the backup was successful
+          }
+
+          try {
+            // Clean up old backups based on retention period
+            const pool = getPool();
+            const [retentionSetting] = await pool.query<mysql.RowDataPacket[]>(
+              'SELECT value FROM settings WHERE setting_key = "data_retention"'
+            );
+            
+            if (retentionSetting.length) {
+              const retentionDays = parseInt(retentionSetting[0].value);
+              const files = await fs.readdir(location);
+              const now = new Date();
+
+              for (const file of files) {
+                if (file.startsWith('database-backup-')) {
+                  const filePath = path.join(location, file);
+                  const stats = await fs.stat(filePath);
+                  const fileAge = (now.getTime() - stats.mtime.getTime()) / (1000 * 60 * 60 * 24);
+
+                  if (fileAge > retentionDays) {
+                    await fs.unlink(filePath);
+                    console.log('Deleted old backup:', filePath);
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error cleaning up old backups:', error);
+            // Don't return error here as the backup was successful
+          }
+
+          return new NextResponse(JSON.stringify({ 
+            success: true, 
+            message: 'Backup saved successfully',
+            backupPath: path.join(location, backup.name)
+          }), { 
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } catch (error) {
+          console.error('Error in save-backup:', error);
+          return new NextResponse(JSON.stringify({ 
+            error: 'Failed to save backup',
+            details: error instanceof Error ? error.message : 'Unknown error'
+          }), { 
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+          });
         }
 
       default:
