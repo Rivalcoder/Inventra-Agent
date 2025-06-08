@@ -47,7 +47,7 @@ export async function POST(req: Request) {
         schema: z.object({
           Topic: z.object({
             Heading: z.string(),
-            Description: z.array(z.string()),
+            Description: z.string(),
             SqlQuery: z.array(z.string()).optional(),
           }),
         }),
@@ -69,16 +69,79 @@ export async function POST(req: Request) {
                     - It should be Short And Concise
                     
                 2). Description :
-                    - If information is missing, list what information is needed
-                    - If all information is available, provide the analysis or explanation
-                    - For sales data, give data in points according to the question
-                    - For suggestions, provide recommendations based on the data
-                    - Format as a clear list of points
+                    Format your response as a single string with the following structure (keep it concise and relevant to the query):
+                    
+                    ### 📊 Summary
+                    Use a table to display key metrics (ensure proper markdown table formatting):
+                    | Metric | Value |
+                    |:-------|:------|
+                    | Total Revenue | $X,XXX.XX |
+                    | Total Sales | XX |
+                    | Total Units | XX |
+                    
+                    ### 📈 Details
+                    For product-specific data, use a table (ensure proper markdown table formatting):
+                    | Product | Revenue | Sales | Units |
+                    |:--------|:--------|:------|:------|
+                    | Product 1 | $X,XXX.XX | XX | XX |
+                    | Product 2 | $X,XXX.XX | XX | XX |
+                    
+                    ### 💡 Insights
+                    Format insights as a bulleted list with icons (keep each point concise):
+                    * 📌 Key finding 1
+                    * 📌 Key finding 2
+                    * 📌 Key finding 3
+                    
+                    ### ⚠️ Important Notes
+                    Use blockquotes for important notes (keep it brief and relevant):
+                    > Note: Add any important caveats or limitations here
+                    
+                    ### 📋 Recommendations
+                    Format recommendations as a numbered list with icons (keep each point actionable):
+                    1. 🔄 Action item 1
+                    2. 🔄 Action item 2
+                    3. 🔄 Action item 3
+                    
+                    Important Formatting Rules:
+                    1. Tables:
+                       - Always use proper markdown table syntax
+                       - Align columns with colons (e.g., |:---|:---|)
+                       - Ensure consistent spacing
+                       - Keep tables compact and readable
+                    
+                    2. Content:
+                       - Answer ONLY what the user asked
+                       - Keep each section concise and focused
+                       - Avoid repeating information
+                       - Use bullet points for better readability
+                       - Format numbers with proper separators
+                       - Use emojis consistently
+                       - Do not add extra information not requested
+                       - Return as a single string, not an array
+                    
+                    3. Styling:
+                       - Use **bold** for important metrics
+                       - Use *italic* for emphasis
+                       - Use \`code\` for technical terms
+                       - Use > for important notes
+                       - Add emojis for visual hierarchy:
+                         - 📊 for statistics
+                         - 📈 for trends
+                         - ⚠️ for warnings
+                         - 💡 for insights
+                         - 🔍 for analysis
+                         - 📌 for key points
+                         - 💰 for financial data
+                         - 📦 for inventory data
+                         - 🔄 for actions
+                         - 📋 for lists
 
                 3). SqlQuery (Optional) :
                     - Only provide if all necessary information is available
                     - For data modifications (add/update/delete), include the complete SQL query
                     - For data queries, include the SELECT query to get the requested information
+                    - Format SQL queries in code blocks with \`\`\`sql
+                    - Add comments to explain complex queries
                `
       });
 

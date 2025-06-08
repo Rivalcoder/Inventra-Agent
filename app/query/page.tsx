@@ -7,15 +7,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { SendHorizontal, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface QueryResult {
   data: {
     Topic: {
       Heading: string;
-      Description: string[];
+      Description: string;
       SqlQuery?: string[];
     };
   };
+  type: string;
   explanation: string;
   rawData: any;
 }
@@ -55,7 +57,6 @@ export default function QueryPage() {
       });
 
       const data = await response.json();
-
       if (!response.ok) {
         throw new Error(data.details || data.error || 'Failed to process query');
       }
@@ -67,7 +68,7 @@ export default function QueryPage() {
         explanation: 'AI-generated response based on your query and current data',
         rawData: data.data // Include the raw data for potential visualizations
       };
-
+      console.log(formattedResult);
       setResult(formattedResult);
       setHistory(prev => [query, ...prev.slice(0, 4)]);
       setQuery(""); // Clear the input field after successful response
@@ -141,29 +142,124 @@ export default function QueryPage() {
                     </h2>
                     
                     <div className="space-y-4">
-                      {result.data.Topic.Description.map((desc, index) => (
-                        <div key={index} className="text-gray-700 prose prose-sm max-w-none">
-                          <ReactMarkdown>
-                            {desc}
+                      {result.data.Topic.Description && (
+                        <div className="text-gray-700 dark:text-gray-300 markdown-content">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              h3: ({ node, ...props }) => (
+                                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mt-6 mb-3" {...props} />
+                              ),
+                              p: ({ node, ...props }) => (
+                                <p className="text-sm text-gray-600 dark:text-gray-300 my-2" {...props} />
+                              ),
+                              table: ({ node, ...props }) => (
+                                <div className="overflow-x-auto my-4">
+                                  <table className="min-w-full border-collapse border border-gray-200 dark:border-gray-700" {...props} />
+                                </div>
+                              ),
+                              th: ({ node, ...props }) => (
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700" {...props} />
+                              ),
+                              td: ({ node, ...props }) => (
+                                <td className="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap border border-gray-200 dark:border-gray-700" {...props} />
+                              ),
+                              tr: ({ node, ...props }) => (
+                                <tr className="hover:bg-gray-100 dark:hover:bg-gray-800/50" {...props} />
+                              ),
+                              ul: ({ node, ...props }) => (
+                                <ul className="list-disc list-inside space-y-1 text-sm text-gray-600 dark:text-gray-300 my-2" {...props} />
+                              ),
+                              ol: ({ node, ...props }) => (
+                                <ol className="list-decimal list-inside space-y-1 text-sm text-gray-600 dark:text-gray-300 my-2" {...props} />
+                              ),
+                              li: ({ node, ...props }) => (
+                                <li className="text-sm text-gray-600 dark:text-gray-300 my-1" {...props} />
+                              ),
+                              blockquote: ({ node, ...props }) => (
+                                <blockquote className="border-l-4 border-blue-500 pl-4 py-1 my-2 text-sm text-gray-600 dark:text-gray-300 italic" {...props} />
+                              ),
+                            }}
+                          >
+                            {result.data.Topic.Description}
                           </ReactMarkdown>
+                          <style jsx global>{`
+                            .markdown-content {
+                              width: 100%;
+                            }
+                            .markdown-content table {
+                              width: 100%;
+                              border-collapse: collapse;
+                              margin: 1rem 0;
+                            }
+                            .markdown-content th,
+                            .markdown-content td {
+                              border: 1px solid #e5e7eb;
+                              padding: 0.5rem 1rem;
+                              text-align: left;
+                            }
+                            .markdown-content th {
+                              background-color: #f9fafb;
+                              font-weight: 500;
+                              text-transform: uppercase;
+                              font-size: 0.75rem;
+                            }
+                            .markdown-content tr:nth-child(even) {
+                              background-color: #f9fafb;
+                            }
+                            .markdown-content tr:hover {
+                              background-color: #f3f4f6;
+                            }
+                            .markdown-content h3 {
+                              margin-top: 1.5rem;
+                              margin-bottom: 0.75rem;
+                              font-size: 1.125rem;
+                              font-weight: 500;
+                            }
+                            .markdown-content p {
+                              margin: 0.5rem 0;
+                            }
+                            .markdown-content ul,
+                            .markdown-content ol {
+                              margin: 0.5rem 0;
+                              padding-left: 1.5rem;
+                            }
+                            .markdown-content li {
+                              margin: 0.25rem 0;
+                            }
+                            .markdown-content blockquote {
+                              margin: 0.5rem 0;
+                              padding-left: 1rem;
+                              border-left: 4px solid #3b82f6;
+                              font-style: italic;
+                            }
+                            .dark .markdown-content th,
+                            .dark .markdown-content td {
+                              border-color: #374151;
+                            }
+                            .dark .markdown-content th {
+                              background-color: #1f2937;
+                            }
+                            .dark .markdown-content tr:nth-child(even) {
+                              background-color: #1f2937;
+                            }
+                            .dark .markdown-content tr:hover {
+                              background-color: #374151;
+                            }
+                          `}</style>
                         </div>
-                      ))}
-                    </div>
-
-                    {result.data.Topic.SqlQuery && result.data.Topic.SqlQuery.length > 0 && (
-                      <div className="mt-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                          SQL Query
-                        </h3>
-                        <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
-                          {result.data.Topic.SqlQuery.map((query, index) => (
-                            <pre key={index} className="text-sm text-gray-800">
-                              {query}
+                      )}
+                      {result.data.Topic.SqlQuery && result.data.Topic.SqlQuery.length > 0 && (
+                        <div className="mt-4">
+                          <h3 className="text-lg font-medium mb-2">SQL Query</h3>
+                          <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 overflow-x-auto">
+                            <pre className="text-sm font-mono">
+                              {result.data.Topic.SqlQuery.join('\n')}
                             </pre>
-                          ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

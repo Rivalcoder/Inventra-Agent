@@ -42,7 +42,6 @@ export default function AIQueryPage() {
       }
 
       const data = await response.json();
-      
       if (data.error) {
         throw new Error(data.error);
       }
@@ -50,7 +49,8 @@ export default function AIQueryPage() {
       // Parse and validate the response
       const parsedResponse = JSON.parse(data.response);
       const validatedResponse = responseSchema.parse(parsedResponse);
-      
+      alert(validatedResponse);
+
       setResponse(validatedResponse);
       toast.success('Query processed successfully');
     } catch (error: any) {
