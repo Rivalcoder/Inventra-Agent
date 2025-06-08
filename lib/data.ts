@@ -3,7 +3,8 @@ import {
   Sale, 
   DashboardStats, 
   SalesByPeriod, 
-  TopProduct 
+  TopProduct,
+  Settings
 } from '@/lib/types';
 import { getApiBase } from './utils';
 
@@ -125,4 +126,63 @@ export async function getLowStockProducts(): Promise<Product[]> {
     stock: Number(item.stock) || 0,
     minStock: Number(item.minStock) || 0
   }));
+}
+
+// Settings operations
+export async function getSettings(): Promise<Settings[]> {
+  try {
+    const response = await fetchFromApi('settings', { action: 'settings' });
+    console.log('getSettings response:', response);
+    return response;
+  } catch (error) {
+    console.error('Error in getSettings:', error);
+    return [];
+  }
+}
+
+export async function getSetting(key: string): Promise<Settings | null> {
+  try {
+    const response = await fetchFromApi('setting', { action: 'setting', key });
+    console.log('getSetting response:', response);
+    return response;
+  } catch (error) {
+    console.error('Error in getSetting:', error);
+    return null;
+  }
+}
+
+export async function createSetting(setting: Omit<Settings, 'id' | 'createdAt' | 'updatedAt'>): Promise<Settings> {
+  try {
+    console.log('Creating setting:', setting);
+    const response = await postToApi('settings', setting);
+    console.log('createSetting response:', response);
+    return response;
+  } catch (error) {
+    console.error('Error in createSetting:', error);
+    throw error;
+  }
+}
+
+export async function updateSetting(setting: Pick<Settings, 'setting_key'> & Partial<Omit<Settings, 'id' | 'createdAt' | 'updatedAt'>>): Promise<Settings> {
+  try {
+    console.log('Updating setting:', setting);
+    const response = await postToApi('update-setting', setting);
+    console.log('updateSetting response:', response);
+    return response;
+  } catch (error) {
+    console.error('Error in updateSetting:', error);
+    throw error;
+  }
+}
+
+export async function deleteSetting(key: string): Promise<{ success: boolean }> {
+  try {
+    console.log('Deleting setting:', key);
+    const response = await postToApi('delete-setting', { setting_key: key });
+    console.log('deleteSetting response:', response);
+    return response;
+  } catch (error) {
+    console.error('Error in deleteSetting:', error);
+    throw error;
+  }
 }

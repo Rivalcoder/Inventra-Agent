@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { updateSetting } from "@/lib/data";
+import { toast } from "sonner";
 
 export default function Header() {
   const { theme, setTheme } = useTheme();
@@ -19,6 +21,21 @@ export default function Header() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  const handleThemeChange = async (newTheme: string) => {
+    try {
+      await updateSetting({
+        setting_key: 'theme',
+        value: newTheme,
+        type: 'string',
+        description: 'Application theme'
+      });
+      setTheme(newTheme);
+    } catch (error) {
+      console.error('Error updating theme:', error);
+      toast.error('Failed to update theme');
+    }
+  };
 
   if (!mounted) {
     return (
@@ -54,13 +71,13 @@ export default function Header() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setTheme("light")}>
+            <DropdownMenuItem onClick={() => handleThemeChange("light")}>
               Light
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setTheme("dark")}>
+            <DropdownMenuItem onClick={() => handleThemeChange("dark")}>
               Dark
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setTheme("system")}>
+            <DropdownMenuItem onClick={() => handleThemeChange("system")}>
               System
             </DropdownMenuItem>
           </DropdownMenuContent>

@@ -89,6 +89,16 @@ async function initializeDatabase() {
         date DATETIME NOT NULL,
         customer VARCHAR(255),
         FOREIGN KEY (productId) REFERENCES products(id) ON DELETE CASCADE
+      )`,
+      `CREATE TABLE IF NOT EXISTS settings (
+        id VARCHAR(36) PRIMARY KEY,
+        setting_key VARCHAR(255) NOT NULL UNIQUE,
+        value TEXT,
+        type VARCHAR(50) NOT NULL,
+        description TEXT,
+        isEncrypted BOOLEAN DEFAULT false,
+        createdAt DATETIME NOT NULL,
+        updatedAt DATETIME NOT NULL
       )`
     ];
 
@@ -417,6 +427,116 @@ export async function GET(request: Request) {
         const [product] = await pool.query<mysql.RowDataPacket[]>('SELECT * FROM products WHERE id = ?', [id]);
         return NextResponse.json(product[0] || null);
 
+      case 'settings':
+        console.log('Fetching all settings...');
+        const [settings] = await pool.query<mysql.RowDataPacket[]>('SELECT * FROM settings');
+        console.log(`Found ${settings.length} settings`);
+        return NextResponse.json(settings);
+
+      case 'setting':
+        const settingKey = searchParams.get('key');
+        if (!settingKey) {
+          return NextResponse.json({ error: 'Setting key is required' }, { status: 400 });
+        }
+        console.log('Fetching setting:', settingKey);
+        const [setting] = await pool.query<mysql.RowDataPacket[]>('SELECT * FROM settings WHERE setting_key = ?', [settingKey]);
+        return NextResponse.json(setting[0] || null);
+
+      case 'export-database':
+        console.log('Exporting database...');
+        const [exportedProducts] = await pool.query<mysql.RowDataPacket[]>(
+          'SELECT * FROM products'
+        );
+        const [exportedSales] = await pool.query<mysql.RowDataPacket[]>(
+          'SELECT * FROM sales'
+        );
+        const [exportedSettings] = await pool.query<mysql.RowDataPacket[]>(
+          'SELECT * FROM settings'
+        );
+
+        return NextResponse.json({
+          products: exportedProducts,
+          sales: exportedSales,
+          settings: exportedSettings,
+          exportDate: new Date().toISOString(),
+          version: '1.0'
+        });
+
+      case 'import-inventory':
+        console.log('Importing inventory data...');
+        const { data: inventoryData } = await request.json();
+        
+        // Start a transaction
+        const inventoryConn = await pool.getConnection();
+        await inventoryConn.beginTransaction();
+
+        try {
+          // Clear existing inventory data
+          await inventoryConn.query('DELETE FROM products');
+          
+          // Insert new inventory data
+          for (const item of inventoryData) {
+            await inventoryConn.query(
+              'INSERT INTO products (id, name, description, price, quantity, category, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+              [
+                item.id,
+                item.name,
+                item.description,
+                item.price,
+                item.quantity,
+                item.category,
+                item.createdAt,
+                item.updatedAt
+              ]
+            );
+          }
+
+          await inventoryConn.commit();
+          return NextResponse.json({ success: true, message: 'Inventory data imported successfully' });
+        } catch (error) {
+          await inventoryConn.rollback();
+          throw error;
+        } finally {
+          inventoryConn.release();
+        }
+
+      case 'import-sales':
+        console.log('Importing sales data...');
+        const { data: salesData } = await request.json();
+        
+        // Start a transaction
+        const salesConn = await pool.getConnection();
+        await salesConn.beginTransaction();
+
+        try {
+          // Clear existing sales data
+          await salesConn.query('DELETE FROM sales');
+          
+          // Insert new sales data
+          for (const sale of salesData) {
+            await salesConn.query(
+              'INSERT INTO sales (id, product_id, quantity, total_price, sale_date, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              [
+                sale.id,
+                sale.product_id,
+                sale.quantity,
+                sale.total_price,
+                sale.sale_date,
+                sale.createdAt,
+                sale.updatedAt
+              ]
+            );
+          }
+
+          await salesConn.commit();
+          return NextResponse.json({ success: true, message: 'Sales data imported successfully' });
+        } catch (error) {
+          await salesConn.rollback();
+          throw error;
+        } finally {
+          salesConn.release();
+        }
+
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
@@ -499,6 +619,120 @@ export async function POST(request: Request) {
           [newStock, stockProductId]
         );
         return NextResponse.json({ success: true });
+
+      case 'settings':
+        const settingId = crypto.randomUUID();
+        const settingNow = formatDateForMySQL(new Date());
+        console.log('Creating setting:', body);
+        
+        // Check if setting already exists
+        const [existingSetting] = await pool.query<mysql.RowDataPacket[]>(
+          'SELECT * FROM settings WHERE setting_key = ?',
+          [body.setting_key]
+        );
+
+        if (existingSetting.length > 0) {
+          // Update existing setting
+          await pool.query(
+            'UPDATE settings SET value = ?, type = ?, description = ?, isEncrypted = ?, updatedAt = ? WHERE setting_key = ?',
+            [body.value, body.type, body.description, body.isEncrypted || false, settingNow, body.setting_key]
+          );
+          return NextResponse.json({ ...body, id: existingSetting[0].id, updatedAt: settingNow });
+        } else {
+          // Create new setting
+          await pool.query(
+            'INSERT INTO settings (id, setting_key, value, type, description, isEncrypted, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [settingId, body.setting_key, body.value, body.type, body.description, body.isEncrypted || false, settingNow, settingNow]
+          );
+          return NextResponse.json({ ...body, id: settingId, createdAt: settingNow, updatedAt: settingNow });
+        }
+
+      case 'update-setting':
+        console.log('Updating setting:', body);
+        const updateSettingNow = formatDateForMySQL(new Date());
+        
+        // Check if setting exists
+        const [settingToUpdate] = await pool.query<mysql.RowDataPacket[]>(
+          'SELECT * FROM settings WHERE setting_key = ?',
+          [body.setting_key]
+        );
+
+        if (settingToUpdate.length === 0) {
+          // Create new setting if it doesn't exist
+          const newSettingId = crypto.randomUUID();
+          await pool.query(
+            'INSERT INTO settings (id, setting_key, value, type, description, isEncrypted, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [newSettingId, body.setting_key, body.value, body.type, body.description, body.isEncrypted || false, updateSettingNow, updateSettingNow]
+          );
+          return NextResponse.json({ ...body, id: newSettingId, createdAt: updateSettingNow, updatedAt: updateSettingNow });
+        } else {
+          // Update existing setting
+          await pool.query(
+            'UPDATE settings SET value = ?, type = ?, description = ?, isEncrypted = ?, updatedAt = ? WHERE setting_key = ?',
+            [body.value, body.type, body.description, body.isEncrypted || false, updateSettingNow, body.setting_key]
+          );
+          return NextResponse.json({ ...body, id: settingToUpdate[0].id, updatedAt: updateSettingNow });
+        }
+
+      case 'delete-setting':
+        console.log('Deleting setting:', body.setting_key);
+        await pool.query('DELETE FROM settings WHERE setting_key = ?', [body.setting_key]);
+        return NextResponse.json({ success: true });
+
+      case 'import-database':
+        console.log('Importing database...');
+        const { products, sales, settings } = body;
+
+        // Start a transaction
+        const connection = await pool.getConnection();
+        await connection.beginTransaction();
+
+        try {
+          // Clear existing data
+          await connection.query('DELETE FROM sales');
+          await connection.query('DELETE FROM products');
+          await connection.query('DELETE FROM settings');
+
+          // Import products
+          if (Array.isArray(products)) {
+            for (const product of products) {
+              await connection.query(
+                'INSERT INTO products (id, name, description, category, price, stock, minStock, supplier, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [product.id, product.name, product.description, product.category, product.price, product.stock, product.minStock, product.supplier, product.createdAt, product.updatedAt]
+              );
+            }
+          }
+
+          // Import sales
+          if (Array.isArray(sales)) {
+            for (const sale of sales) {
+              await connection.query(
+                'INSERT INTO sales (id, productId, productName, quantity, price, total, date, customer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                [sale.id, sale.productId, sale.productName, sale.quantity, sale.price, sale.total, sale.date, sale.customer]
+              );
+            }
+          }
+
+          // Import settings
+          if (Array.isArray(settings)) {
+            for (const setting of settings) {
+              await connection.query(
+                'INSERT INTO settings (id, setting_key, value, type, description, isEncrypted, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                [setting.id, setting.setting_key, setting.value, setting.type, setting.description, setting.isEncrypted, setting.createdAt, setting.updatedAt]
+              );
+            }
+          }
+
+          // Commit the transaction
+          await connection.commit();
+          return NextResponse.json({ success: true, message: 'Database imported successfully' });
+        } catch (error) {
+          // Rollback in case of error
+          await connection.rollback();
+          throw error;
+        } finally {
+          connection.release();
+        }
 
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

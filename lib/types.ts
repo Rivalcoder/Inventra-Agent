@@ -65,3 +65,15 @@ export interface ReportOptions {
   type: 'sales' | 'inventory' | 'revenue';
   format: 'pdf' | 'csv';
 }
+
+// Settings Types
+export interface Settings {
+  id: string;
+  setting_key: string;
+  value: string;
+  type: 'string' | 'number' | 'boolean' | 'json' | 'icon' | 'credential';
+  description?: string;
+  isEncrypted: boolean;
+  createdAt: string;
+  updatedAt: string;
+}

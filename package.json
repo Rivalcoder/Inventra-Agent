@@ -58,6 +58,7 @@
     "input-otp": "^1.2.4",
     "jspdf": "^3.0.1",
     "jspdf-autotable": "^5.0.2",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.446.0",
     "mysql2": "^3.14.1",
     "next": "^15.3.3",
