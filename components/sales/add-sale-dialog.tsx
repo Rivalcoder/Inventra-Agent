@@ -9,8 +9,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SaleForm } from "@/components/sales/sale-form";
-import { Sale } from "@/lib/types";
-import { products } from "@/lib/data";
+import { Sale, Product } from "@/lib/types";
+import { getProducts, postToApi, createSale } from "@/lib/data";
+import { toast } from "sonner";
+import { useState, useEffect } from "react";
 
 interface AddSaleDialogProps {
   open: boolean;
@@ -23,27 +25,80 @@ export function AddSaleDialog({
   onOpenChange,
   onAdd,
 }: AddSaleDialogProps) {
-  const handleSubmit = (data: Omit<Sale, "id" | "date" | "productName" | "price" | "total">) => {
-    const product = products.find(p => p.id === data.productId);
-    
-    if (!product) {
-      console.error("Product not found");
-      return;
-    }
-    
-    const newSale: Sale = {
-      id: uuidv4(),
-      productId: data.productId,
-      productName: product.name,
-      quantity: data.quantity,
-      price: product.price,
-      total: product.price * data.quantity,
-      date: new Date().toISOString(),
-      customer: data.customer,
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const productsData = await getProducts();
+        setProducts(productsData);
+      } catch (error) {
+        console.error('Error fetching products:', error);
+        toast.error('Failed to fetch products');
+      } finally {
+        setLoading(false);
+      }
     };
 
-    onAdd(newSale);
+    fetchProducts();
+  }, []);
+
+  const handleSubmit = async (data: Omit<Sale, "id" | "date" | "productName" | "price" | "total">) => {
+    try {
+      const product = products.find(p => p.id === data.productId);
+      
+      if (!product) {
+        toast.error("Product not found");
+        return;
+      }
+
+      if (product.stock < data.quantity) {
+        toast.error(`Insufficient stock. Only ${product.stock} units available.`);
+        return;
+      }
+      
+      const saleData = {
+        productId: data.productId,
+        productName: product.name,
+        quantity: Number(data.quantity),
+        price: Number(product.price),
+        total: Number(product.price * data.quantity),
+        date: new Date().toISOString(),
+        customer: data.customer || ""
+      };
+
+      // First create the sale record
+      const createdSale = await createSale(saleData);
+
+      // Then update the product stock
+      const newStock = product.stock - data.quantity;
+      await postToApi('update-stock', {
+        productId: product.id,
+        newStock: newStock
+      });
+
+      // Update local state
+      setProducts(prevProducts => 
+        prevProducts.map(p => 
+          p.id === product.id 
+            ? { ...p, stock: newStock }
+            : p
+        )
+      );
+
+      onAdd(createdSale);
+      onOpenChange(false); // Close the dialog after successful submission
+      toast.success("Sale recorded successfully");
+    } catch (error) {
+      console.error('Error creating sale:', error);
+      toast.error('Failed to record sale');
+    }
   };
+
+  if (loading) {
+    return <div>Loading products...</div>;
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

@@ -7,33 +7,36 @@ interface QueryExamplesProps {
   onSelect: (query: string) => void;
 }
 
-export function QueryExamples({ onSelect }: QueryExamplesProps) {
-  const examples = [
-    "What are my top selling products?",
-    "Show me sales from last month",
-    "Which items are low in stock?",
-    "What was my revenue by category?",
-    "Show sales trends for the last quarter",
-  ];
+const EXAMPLE_QUERIES = [
+  "What are our top selling products?",
+  "Show me products with low stock",
+  "What's our total revenue this month?",
+  "Which products have the highest profit margin?",
+  "Show me sales trends for the last 3 months",
+  "What's our inventory value by category?",
+  "Which suppliers do we order from most frequently?",
+  "What's our average order value?",
+  "Show me products that haven't sold in 30 days",
+  "What's our best performing product category?"
+];
 
+export function QueryExamples({ onSelect }: QueryExamplesProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Example Queries</CardTitle>
+        <CardTitle>Example Queries</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-2">
-          {examples.map((example, index) => (
-            <Button
-              key={index}
-              variant="outline"
-              className="w-full justify-start text-left h-auto py-2"
-              onClick={() => onSelect(example)}
-            >
-              {example}
-            </Button>
-          ))}
-        </div>
+      <CardContent className="space-y-2">
+        {EXAMPLE_QUERIES.map((query, index) => (
+          <Button
+            key={index}
+            variant="ghost"
+            className="w-full justify-start text-left font-normal"
+            onClick={() => onSelect(query)}
+          >
+            {query}
+          </Button>
+        ))}
       </CardContent>
     </Card>
   );

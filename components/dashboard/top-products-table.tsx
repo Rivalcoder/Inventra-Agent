@@ -7,7 +7,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TopProduct } from "@/lib/types";
+import { formatCurrency } from "@/lib/utils";
+
+interface TopProduct {
+  id: string;
+  name: string;
+  sales: number;
+  revenue: number;
+}
 
 interface TopProductsTableProps {
   products: TopProduct[];
@@ -17,14 +24,14 @@ export function TopProductsTable({ products }: TopProductsTableProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Top Selling Products</CardTitle>
+        <CardTitle>Top Products</CardTitle>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Product</TableHead>
-              <TableHead className="text-right">Units Sold</TableHead>
+              <TableHead className="text-right">Sales</TableHead>
               <TableHead className="text-right">Revenue</TableHead>
             </TableRow>
           </TableHeader>
@@ -34,7 +41,7 @@ export function TopProductsTable({ products }: TopProductsTableProps) {
                 <TableCell className="font-medium">{product.name}</TableCell>
                 <TableCell className="text-right">{product.sales}</TableCell>
                 <TableCell className="text-right">
-                  ${product.revenue.toFixed(2)}
+                  {formatCurrency(product.revenue)}
                 </TableCell>
               </TableRow>
             ))}

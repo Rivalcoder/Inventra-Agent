@@ -8,18 +8,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { sales } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { Sale } from "@/lib/types";
 
-export function SalesReportTable() {
-  // Sort sales by date (newest first)
-  const sortedSales = [...sales].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
+interface SalesReportTableProps {
+  sales: Sale[];
+  loading: boolean;
+}
+
+export function SalesReportTable({ sales, loading }: SalesReportTableProps) {
+  if (loading) {
+    return <div>Loading sales data...</div>;
+  }
 
   // Calculate totals
-  const totalQuantity = sortedSales.reduce((sum, sale) => sum + sale.quantity, 0);
-  const totalRevenue = sortedSales.reduce((sum, sale) => sum + sale.total, 0);
+  const totalQuantity = sales.reduce((sum, sale) => sum + (Number(sale.quantity) || 0), 0);
+  const totalRevenue = sales.reduce((sum, sale) => sum + (Number(sale.total) || 0), 0);
 
   return (
     <div>
@@ -36,7 +40,7 @@ export function SalesReportTable() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedSales.map((sale) => (
+            {sales.map((sale) => (
               <TableRow key={sale.id}>
                 <TableCell>{formatDate(sale.date)}</TableCell>
                 <TableCell className="font-medium">{sale.productName}</TableCell>
@@ -50,6 +54,13 @@ export function SalesReportTable() {
                 </TableCell>
               </TableRow>
             ))}
+            {sales.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="h-24 text-center">
+                  No sales found for the selected date range.
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </div>
@@ -57,7 +68,7 @@ export function SalesReportTable() {
       <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between rounded-md border p-4">
         <div>
           <span className="text-sm font-medium text-muted-foreground">
-            Total Sales: {sortedSales.length}
+            Total Sales: {sales.length}
           </span>
         </div>
         <div>

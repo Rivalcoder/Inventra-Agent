@@ -49,6 +49,13 @@ export interface QueryResult {
   type: 'table' | 'chart' | 'text';
   data: any;
   explanation?: string;
+  rawData?: {
+    products?: Product[];
+    sales?: Sale[];
+    stats?: DashboardStats;
+    topProducts?: TopProduct[];
+    lowStock?: Product[];
+  };
 }
 
 // Reports Types

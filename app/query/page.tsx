@@ -4,86 +4,83 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { QueryResultDisplay } from "@/components/query/query-result-display";
-import { QueryExamples } from "@/components/query/query-examples";
-import { QueryHistory } from "@/components/query/query-history";
-import { QueryResult } from "@/lib/types";
 import { SendHorizontal, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import ReactMarkdown from 'react-markdown';
+
+interface QueryResult {
+  data: {
+    Topic: {
+      Heading: string;
+      Description: string[];
+      SqlQuery?: string[];
+    };
+  };
+  explanation: string;
+  rawData: any;
+}
+
+const exampleQuestions = [
+  "What are our top 5 selling products?",
+  "Which products are running low on stock?",
+  "Show me the total sales for this month",
+  "What's our inventory value?",
+  "Which products need to be restocked soon?",
+  "What's the trend in our sales?",
+  "Which category has the highest revenue?",
+  "What's our profit margin?",
+  "Show me products with declining sales",
+  "What's our best performing product category?"
+];
 
 export default function QueryPage() {
-  const [query, setQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [query, setQuery] = useState('');
   const [result, setResult] = useState<QueryResult | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
+  const { toast } = useToast();
 
   const processQuery = async () => {
     if (!query.trim()) return;
 
     setIsLoading(true);
     
-    // This is a mock implementation that would be replaced by real AI processing
-    // In a real app, this would call the Vercel AI SDK endpoint
-    setTimeout(() => {
-      // Example results based on common queries
-      let mockResult: QueryResult;
-      
-      const lowerQuery = query.toLowerCase();
-      
-      if (lowerQuery.includes("top selling products")) {
-        mockResult = {
-          type: "table",
-          data: {
-            columns: ["Product", "Units Sold", "Revenue"],
-            rows: [
-              ["Laptop Pro", 42, "$54,599.58"],
-              ["Wireless Earbuds", 38, "$5,699.62"],
-              ["Wireless Mouse", 31, "$929.69"],
-              ["USB-C Dock", 25, "$2,249.75"],
-              ["Mechanical Keyboard", 18, "$2,339.82"]
-            ]
-          },
-          explanation: "Here are the top selling products based on units sold. Laptop Pro is your best-selling product with 42 units sold, generating $54,599.58 in revenue."
-        };
-      } else if (lowerQuery.includes("sales last month") || lowerQuery.includes("monthly sales")) {
-        mockResult = {
-          type: "chart",
-          data: {
-            type: "bar",
-            labels: ["Week 1", "Week 2", "Week 3", "Week 4"],
-            datasets: [
-              {
-                label: "Sales",
-                data: [12450, 14280, 15320, 18640]
-              }
-            ]
-          },
-          explanation: "Sales have shown consistent growth throughout last month, with Week 4 having the highest performance at $18,640."
-        };
-      } else if (lowerQuery.includes("low stock")) {
-        mockResult = {
-          type: "table",
-          data: {
-            columns: ["Product", "Current Stock", "Min Stock", "Status"],
-            rows: [
-              ["Mechanical Keyboard", 4, 5, "Low"],
-              ["Ultrawide Monitor", 7, 3, "OK"],
-              ["Laptop Pro", 15, 5, "OK"]
-            ]
-          },
-          explanation: "Your Mechanical Keyboard is below the minimum stock level. Consider restocking soon to avoid stockouts."
-        };
-      } else {
-        mockResult = {
-          type: "text",
-          data: "I'm sorry, I couldn't understand your query. Try asking about sales performance, inventory status, or revenue trends.",
-          explanation: "Try queries like 'Show me top selling products' or 'What items are low in stock?'"
-        };
+    try {
+      const response = await fetch('/api/ai', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.details || data.error || 'Failed to process query');
       }
       
-      setResult(mockResult);
+      // Parse the AI response and format it for display
+      const formattedResult: QueryResult = {
+        type: 'text',
+        data: data.response,
+        explanation: 'AI-generated response based on your query and current data',
+        rawData: data.data // Include the raw data for potential visualizations
+      };
+
+      setResult(formattedResult);
       setHistory(prev => [query, ...prev.slice(0, 4)]);
+      setQuery(""); // Clear the input field after successful response
+    } catch (error: any) {
+      console.error('Query processing error:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to process your query. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -100,7 +97,7 @@ export default function QueryPage() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">AI Query Console</h1>
         <p className="text-muted-foreground">
-          Ask questions about your inventory and sales in natural language
+          Ask questions about your inventory and sales data
         </p>
       </div>
 
@@ -136,13 +133,38 @@ export default function QueryPage() {
             </form>
 
             <div className="mt-6">
-              {result ? (
-                <QueryResultDisplay result={result} />
-              ) : (
-                <div className="rounded-lg border border-dashed p-8 text-center">
-                  <p className="text-muted-foreground">
-                    Your query results will appear here
-                  </p>
+              {result && (
+                <div className="space-y-6">
+                  <div className="bg-white rounded-lg shadow p-6">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                      {result.data.Topic.Heading}
+                    </h2>
+                    
+                    <div className="space-y-4">
+                      {result.data.Topic.Description.map((desc, index) => (
+                        <div key={index} className="text-gray-700 prose prose-sm max-w-none">
+                          <ReactMarkdown>
+                            {desc}
+                          </ReactMarkdown>
+                        </div>
+                      ))}
+                    </div>
+
+                    {result.data.Topic.SqlQuery && result.data.Topic.SqlQuery.length > 0 && (
+                      <div className="mt-6">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                          SQL Query
+                        </h3>
+                        <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
+                          {result.data.Topic.SqlQuery.map((query, index) => (
+                            <pre key={index} className="text-sm text-gray-800">
+                              {query}
+                            </pre>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -150,8 +172,45 @@ export default function QueryPage() {
         </Card>
 
         <div className="space-y-6">
-          <QueryHistory history={history} onSelect={selectFromHistory} />
-          <QueryExamples onSelect={setQuery} />
+          {/* Recent Queries */}
+          {history.length > 0 && (
+            <Card>
+              <CardContent className="p-6">
+                <h3 className="font-semibold mb-4">Recent Queries</h3>
+                <div className="space-y-2">
+                  {history.map((historicalQuery, index) => (
+                    <Button
+                      key={index}
+                      variant="outline"
+                      className="w-full py-6 whitespace-pre-wrap  justify-start text-left"
+                      onClick={() => selectFromHistory(historicalQuery)}
+                    >
+                      {historicalQuery}
+                    </Button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Example Questions */}
+          <Card>
+            <CardContent className="p-6">
+              <h3 className="font-semibold mb-4">Example Questions</h3>
+              <div className="space-y-2">
+                {exampleQuestions.map((question, index) => (
+                  <Button
+                    key={index}
+                    variant="ghost"
+                    className="w-full justify-start text-left"
+                    onClick={() => setQuery(question)}
+                  >
+                    {question}
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

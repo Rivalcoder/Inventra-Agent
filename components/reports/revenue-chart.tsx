@@ -11,79 +11,56 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { Sale } from "@/lib/types";
+import { formatCurrency } from "@/lib/utils";
 
-const data = [
-  {
-    name: "Jan",
-    revenue: 4000,
-    profit: 2400,
-  },
-  {
-    name: "Feb",
-    revenue: 3000,
-    profit: 1398,
-  },
-  {
-    name: "Mar",
-    revenue: 2000,
-    profit: 800,
-  },
-  {
-    name: "Apr",
-    revenue: 2780,
-    profit: 1908,
-  },
-  {
-    name: "May",
-    revenue: 1890,
-    profit: 800,
-  },
-  {
-    name: "Jun",
-    revenue: 2390,
-    profit: 1200,
-  },
-  {
-    name: "Jul",
-    revenue: 3490,
-    profit: 2300,
-  },
-  {
-    name: "Aug",
-    revenue: 4000,
-    profit: 2400,
-  },
-  {
-    name: "Sep",
-    revenue: 4500,
-    profit: 2800,
-  },
-  {
-    name: "Oct",
-    revenue: 5200,
-    profit: 3100,
-  },
-  {
-    name: "Nov",
-    revenue: 4800,
-    profit: 2700,
-  },
-  {
-    name: "Dec",
-    revenue: 6000,
-    profit: 3800,
-  },
-];
+interface RevenueChartProps {
+  sales: Sale[];
+  loading: boolean;
+}
 
-export function RevenueChart() {
+export function RevenueChart({ sales, loading }: RevenueChartProps) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
+
+  if (loading) {
+    return <div>Loading revenue data...</div>;
+  }
+
+  // Process sales data for the chart
+  const monthlyData = sales.reduce((acc: any[], sale) => {
+    const date = new Date(sale.date);
+    const monthKey = date.toLocaleString('default', { month: 'short' });
+    
+    const existingMonth = acc.find(item => item.name === monthKey);
+    if (existingMonth) {
+      existingMonth.revenue += sale.total;
+      existingMonth.profit += sale.total * 0.6; // Assuming 60% profit margin
+    } else {
+      acc.push({
+        name: monthKey,
+        revenue: sale.total,
+        profit: sale.total * 0.6
+      });
+    }
+    return acc;
+  }, []);
+
+  // Sort by month
+  const sortedData = monthlyData.sort((a, b) => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months.indexOf(a.name) - months.indexOf(b.name);
+  });
+
+  if (sortedData.length === 0) {
+    return <div className="h-[400px] flex items-center justify-center">No revenue data available for the selected period.</div>;
+  }
 
   return (
     <div className="h-[400px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart
-          data={data}
+          data={sortedData}
           margin={{
             top: 10,
             right: 30,
@@ -103,13 +80,13 @@ export function RevenueChart() {
             tickLine={false}
           />
           <YAxis
-            tickFormatter={(value) => `$${value}`}
+            tickFormatter={(value) => formatCurrency(value)}
             tick={{ fill: isDark ? "hsl(var(--muted-foreground))" : "#888" }}
             axisLine={{ stroke: isDark ? "hsl(var(--muted))" : "#f0f0f0" }}
             tickLine={false}
           />
           <Tooltip
-            formatter={(value) => [`$${value}`, ""]}
+            formatter={(value) => [formatCurrency(value as number), ""]}
             contentStyle={{
               backgroundColor: isDark ? "hsl(var(--card))" : "#fff",
               borderColor: isDark ? "hsl(var(--border))" : "#f0f0f0",

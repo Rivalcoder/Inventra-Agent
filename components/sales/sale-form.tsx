@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import { Sale } from "@/lib/types";
+import { Sale, Product } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -23,7 +23,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { products } from "@/lib/data";
+import { getProducts } from "@/lib/data";
+import { formatCurrency } from "@/lib/utils";
+import { toast } from "react-hot-toast";
 
 const saleSchema = z.object({
   productId: z.string({
@@ -32,7 +34,10 @@ const saleSchema = z.object({
   quantity: z.coerce
     .number()
     .int()
-    .positive({ message: "Quantity must be a positive number" }),
+    .positive({ message: "Quantity must be a positive number" })
+    .refine((val) => val > 0, {
+      message: "Quantity must be greater than 0",
+    }),
   customer: z.string().optional(),
 });
 
@@ -46,7 +51,25 @@ interface SaleFormProps {
 export function SaleForm({ onSubmit, submitLabel = "Submit" }: SaleFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedProductPrice, setSelectedProductPrice] = useState<number | null>(null);
+  const [selectedProductStock, setSelectedProductStock] = useState<number | null>(null);
   const [totalPrice, setTotalPrice] = useState<number | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const productsData = await getProducts();
+        setProducts(productsData);
+      } catch (error) {
+        console.error('Error fetching products:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, []);
 
   const form = useForm<SaleFormValues>({
     resolver: zodResolver(saleSchema),
@@ -65,11 +88,13 @@ export function SaleForm({ onSubmit, submitLabel = "Submit" }: SaleFormProps) {
       const product = products.find((p) => p.id === watchProductId);
       if (product) {
         setSelectedProductPrice(product.price);
+        setSelectedProductStock(product.stock);
       }
     } else {
       setSelectedProductPrice(null);
+      setSelectedProductStock(null);
     }
-  }, [watchProductId]);
+  }, [watchProductId, products]);
 
   useEffect(() => {
     if (selectedProductPrice !== null && watchQuantity > 0) {
@@ -82,7 +107,24 @@ export function SaleForm({ onSubmit, submitLabel = "Submit" }: SaleFormProps) {
   const handleSubmit = async (data: SaleFormValues) => {
     setIsSubmitting(true);
     try {
-      onSubmit({
+      const selectedProduct = products.find((p) => p.id === data.productId);
+      if (!selectedProduct) {
+        form.setError("productId", {
+          type: "manual",
+          message: "Please select a valid product",
+        });
+        return;
+      }
+
+      if (data.quantity > selectedProduct.stock) {
+        form.setError("quantity", {
+          type: "manual",
+          message: `Quantity cannot exceed available stock (${selectedProduct.stock} units)`,
+        });
+        return;
+      }
+      
+      await onSubmit({
         productId: data.productId,
         quantity: data.quantity,
         customer: data.customer,
@@ -90,10 +132,15 @@ export function SaleForm({ onSubmit, submitLabel = "Submit" }: SaleFormProps) {
       form.reset();
     } catch (error) {
       console.error("Error submitting form:", error);
+      toast.error("Failed to submit sale. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (loading) {
+    return <div>Loading products...</div>;
+  }
 
   return (
     <Form {...form}>
@@ -116,7 +163,7 @@ export function SaleForm({ onSubmit, submitLabel = "Submit" }: SaleFormProps) {
                 <SelectContent>
                   {products.map((product) => (
                     <SelectItem key={product.id} value={product.id}>
-                      {product.name} (${product.price.toFixed(2)})
+                      {product.name} ({formatCurrency(product.price)})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -126,57 +173,63 @@ export function SaleForm({ onSubmit, submitLabel = "Submit" }: SaleFormProps) {
           )}
         />
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField
-            control={form.control}
-            name="quantity"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Quantity</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    min="1"
-                    placeholder="1"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        <FormField
+          control={form.control}
+          name="quantity"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Quantity</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  min="1"
+                  {...field}
+                  onChange={(e) => {
+                    const value = e.target.value === "" ? "" : parseInt(e.target.value);
+                    field.onChange(value);
+                  }}
+                />
+              </FormControl>
+              {selectedProductStock !== null && (
+                <div className="mt-1 text-sm text-muted-foreground">
+                  Available Stock: {selectedProductStock} units
+                </div>
+              )}
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-          <FormField
-            control={form.control}
-            name="customer"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Customer Name (Optional)</FormLabel>
-                <FormControl>
-                  <Input placeholder="Customer name" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+        <FormField
+          control={form.control}
+          name="customer"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Customer (Optional)</FormLabel>
+              <FormControl>
+                <Input {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         {totalPrice !== null && (
           <div className="rounded-md bg-muted p-3">
             <p className="text-sm text-muted-foreground">
               Price per unit:{" "}
               <span className="font-medium text-foreground">
-                ${selectedProductPrice?.toFixed(2)}
+                {formatCurrency(selectedProductPrice || 0)}
               </span>
             </p>
             <p className="text-sm font-bold">
-              Total: ${totalPrice.toFixed(2)}
+              Total: {formatCurrency(totalPrice)}
             </p>
           </div>
         )}
 
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? "Processing..." : submitLabel}
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "Recording..." : submitLabel}
         </Button>
       </form>
     </Form>

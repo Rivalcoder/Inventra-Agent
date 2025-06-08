@@ -25,6 +25,7 @@ import { formatCurrency } from "@/lib/utils";
 import { EditProductDialog } from "@/components/inventory/edit-product-dialog";
 import { DeleteProductDialog } from "@/components/inventory/delete-product-dialog";
 import { AddProductDialog } from "@/components/inventory/add-product-dialog";
+import { createProduct, postToApi } from "@/lib/data";
 
 interface InventoryListProps {
   initialProducts: Product[];
@@ -66,23 +67,41 @@ export function InventoryList({ initialProducts }: InventoryListProps) {
     return matchesSearch && matchesCategory && matchesStock;
   });
 
-  const handleAddProduct = (newProduct: Product) => {
-    setProducts([...products, newProduct]);
-    setShowAddDialog(false);
+  const handleAddProduct = async (newProduct: Product) => {
+    try {
+      const createdProduct = await createProduct(newProduct);
+      setProducts([...products, createdProduct]);
+      setShowAddDialog(false);
+    } catch (error) {
+      console.error('Error adding product:', error);
+      // You might want to show an error toast here
+    }
   };
 
-  const handleUpdateProduct = (updatedProduct: Product) => {
-    setProducts(
-      products.map((product) =>
-        product.id === updatedProduct.id ? updatedProduct : product
-      )
-    );
-    setEditingProduct(null);
+  const handleUpdateProduct = async (updatedProduct: Product) => {
+    try {
+      await postToApi('update-product', updatedProduct);
+      setProducts(
+        products.map((product) =>
+          product.id === updatedProduct.id ? updatedProduct : product
+        )
+      );
+      setEditingProduct(null);
+    } catch (error) {
+      console.error('Error updating product:', error);
+      // You might want to show an error toast here
+    }
   };
 
-  const handleDeleteProduct = (productId: string) => {
-    setProducts(products.filter((product) => product.id !== productId));
-    setDeletingProduct(null);
+  const handleDeleteProduct = async (productId: string) => {
+    try {
+      await postToApi('delete-product', { productId });
+      setProducts(products.filter((product) => product.id !== productId));
+      setDeletingProduct(null);
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      // You might want to show an error toast here
+    }
   };
 
   return (

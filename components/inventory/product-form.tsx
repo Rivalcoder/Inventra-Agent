@@ -153,8 +153,14 @@ export function ProductForm({
                     type="number"
                     placeholder="0"
                     {...field}
+                    value={field.value || 0}
+                    onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : 0)}
                   />
                 </FormControl>
+                <div className="mt-2 p-2 bg-muted rounded-md">
+                  <span className="font-medium">Available Stock:</span>{" "}
+                  <span className="text-lg font-semibold">{field.value || 0}</span> units
+                </div>
                 <FormMessage />
               </FormItem>
             )}
