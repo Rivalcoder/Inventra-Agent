@@ -31,11 +31,11 @@ export default function RootLayout({
         >
           <CurrencyProvider>
           <NotificationProvider>
-            <div className="min-h-screen flex flex-col">
+            <div className="max-h-screen flex flex-col">
               <Header />
-              <div className="flex flex-1">
+              <div className="flex flex-1 min-h-0">
                 <Sidebar />
-                <main className="flex-1 p-4 md:p-6">{children}</main>
+                <main className="flex-1 p-4 md:p-6 pt-14 min-h-0 max-h-screen overflow-y-auto">{children}</main>
               </div>
             </div>
             <Toaster />

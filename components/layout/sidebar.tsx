@@ -137,7 +137,7 @@ export default function Sidebar({ mobile = false, open = false, onOpenChange }: 
     return (
       <aside
         className={cn(
-          "hidden md:flex flex-col border-r bg-card h-screen sticky top-0 z-20 transition-all duration-150 ease-in-out",
+          "hidden md:flex flex-col border-r bg-card max-h-[90vh] sticky top-14 z-20 transition-all duration-150 ease-in-out",
           isCollapsed ? "w-16" : "w-64"
         )}
       >

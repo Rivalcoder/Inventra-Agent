@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Edit, Trash2, Search, Plus } from "lucide-react";
+import { Edit, Trash2, Search, Plus, AlertCircle, AlertTriangle, CheckCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Product } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
@@ -181,15 +181,37 @@ export function InventoryList({ initialProducts }: InventoryListProps) {
                     </TableCell>
                     <TableCell className="text-center">
                       <span
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          product.stock === 0
-                            ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"
+                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold transition-colors duration-200
+                          ${product.stock === 0
+                            ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border border-red-300"
                             : product.stock <= product.minStock
-                            ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300"
-                            : "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
-                        }`}
+                            ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-300"
+                            : "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border border-green-300"
+                          }`
+                        }
+                        title={
+                          product.stock === 0
+                            ? `Out of Stock (Minimum required: ${product.minStock})`
+                            : product.stock <= product.minStock
+                            ? `Low Stock (Minimum required: ${product.minStock})`
+                            : `In Stock`
+                        }
                       >
+                        {product.stock === 0 ? (
+                          <AlertCircle className="w-4 h-4 mr-1 text-red-500" />
+                        ) : product.stock <= product.minStock ? (
+                          <AlertTriangle className="w-4 h-4 mr-1 text-amber-500" />
+                        ) : (
+                          <CheckCircle className="w-4 h-4 mr-1 text-green-500" />
+                        )}
                         {product.stock}
+                        <span className="ml-2 font-normal">
+                          {product.stock === 0
+                            ? "Out of Stock"
+                            : product.stock <= product.minStock
+                            ? "Low"
+                            : "In Stock"}
+                        </span>
                       </span>
                     </TableCell>
                     <TableCell>{product.supplier}</TableCell>
