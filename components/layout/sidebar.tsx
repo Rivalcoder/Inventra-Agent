@@ -98,7 +98,7 @@ export default function Sidebar({ mobile = false, open = false, onOpenChange }: 
         </div>
       )}
       {/* Nav */}
-      <div className="flex-1 w-full overflow-y-auto">
+      <div className="flex-1 w-full min-h-0 overflow-y-auto">
         <nav className="space-y-1 p-2">
           {navItems.map((item) => (
             <Link
@@ -127,8 +127,8 @@ export default function Sidebar({ mobile = false, open = false, onOpenChange }: 
           ))}
         </nav>
       </div>
-      {/* Footer (optional) */}
-      <div className={cn("py-3 px-2 text-xs text-muted-foreground w-full", isCollapsed ? "text-center" : "")}>© {new Date().getFullYear()} InventSmart AI</div>
+      {/* Footer (always visible, never scrolls out) */}
+      <div className={cn("py-3 px-2 text-xs text-muted-foreground w-full shrink-0", isCollapsed ? "text-center" : "")}>© {new Date().getFullYear()} InventSmart AI</div>
     </div>
   );
 
