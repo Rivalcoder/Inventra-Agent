@@ -901,6 +901,10 @@ export async function POST(request: Request) {
           const [result] = await pool.query(sql);
           return NextResponse.json({ success: true, result });
         } catch (err: any) {
+          console.error('SQL execution error:', {
+            sql,
+            error: err.message || err
+          });
           return NextResponse.json({ error: err.message || 'SQL execution failed' }, { status: 500 });
         }
 

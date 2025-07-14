@@ -7,6 +7,11 @@ import { getProducts, getSales, getDashboardStats, getTopProducts, getLowStockPr
 const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 console.log('API Key available:', !!apiKey); // This will log true if the key exists, false if it doesn't
 
+// Helper function to format date for MySQL
+function formatDateForMySQL(date: Date): string {
+  return date.toISOString().slice(0, 19).replace('T', ' ');
+}
+
 export async function POST(req: Request) {
   try {
     const { query } = await req.json();
@@ -30,13 +35,15 @@ export async function POST(req: Request) {
       getLowStockProducts()
     ]);
 
-    // Prepare the context with current data
+    // Prepare the context with current data and current datetime
+    const now = new Date();
     const context = {
       products,
       sales,
       stats,
       topProducts,
-      lowStock
+      lowStock,
+      now: formatDateForMySQL(now) // Pass current datetime in MySQL format
     };
 
     try {
@@ -56,8 +63,18 @@ export async function POST(req: Request) {
                 User Query: ${query}
                 
                 # IMPORTANT:
+                - For any date or datetime fields in SQL that should represent the current time, always use the provided value in the 'now' variable (e.g., ${context.now}).
                 - Do NOT include the SQL query in the Heading or Description fields.
                 - Only provide the SQL query in the SqlQuery field of the response.
+                - For any data modification (add, update, delete) that requires multiple SQL statements (e.g., insert sale and update stock), return each statement as a separate string in the SqlQuery array, in the correct order. NEVER combine multiple SQL statements in a single string. Each string in the SqlQuery array must contain only one complete SQL statement.
+                - If the customer name is not provided in the user query, use 'Anonymous' as the customer name in the SQL statement.
+                - For any date or datetime fields in SQL, always use the MySQL DATETIME format: 'YYYY-MM-DD HH:MM:SS'. Do NOT use ISO format (no 'T' or 'Z').
+                - When generating multiple SQL queries, ensure that if any query fails, the subsequent queries should NOT be executed (simulate transactional behavior). If a failure is likely (e.g., not enough stock), explain the reason in the Description and do NOT generate the SQL queries.
+                - Always validate that the first query (such as inserting a sale) will succeed based on the current data (e.g., check if there is enough stock). If not, explain the issue in the Description and do not provide the SQL.
+                - If a failure occurs, provide a clear error message and do not partially update the database.
+                
+                - Do NOT include the 'id' field in the INSERT statement for the 'sales' table. The database will generate it automatically. For example:
+                  INSERT INTO sales (productId, productName, quantity, price, total, date, customer) VALUES ('1', 'Laptop Pro', 2, 100000, 200000, '${context.now}', 'Anonymous');
                 
                 # If user Ask About The Datas Answer The Question By Viewing The datas and Db  Structure Give The Answers
                 # If User Ask To Add Update Or Delete The Data:
@@ -91,6 +108,7 @@ export async function POST(req: Request) {
                     - For data queries, include the SELECT query to get the requested information
                     - Format SQL queries in code blocks with \`\`\`sql
                     - Add comments to explain complex queries
+                    - if any Customer Name Is Not Provided In The User Query Use 'Anonymous' As The Customer Name In The SQL Statement DOnt ask And Other Important Details ask And Also Get from Db references
 
                 Important Notes:
                 - Be flexible in your response format based on the query type

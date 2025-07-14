@@ -105,8 +105,9 @@ export default function Sidebar({ mobile = false, open = false, onOpenChange }: 
               key={item.href}
               href={item.href}
               className={cn(
-                "flex h-11 items-center rounded-lg px-3 text-muted-foreground font-medium transition-colors hover:bg-accent hover:text-accent-foreground group",
-                pathname === item.href && "bg-accent text-accent-foreground shadow",
+                // Use a soft neutral for hover and active backgrounds
+                "flex h-11 items-center rounded-lg px-3 text-muted-foreground font-medium transition-colors hover:bg-muted hover:text-foreground group",
+                pathname === item.href && "bg-muted text-foreground shadow border border-border",
                 isCollapsed ? "justify-center" : "justify-start"
               )}
               onClick={item.href === '/' ? (e) => {
@@ -119,7 +120,8 @@ export default function Sidebar({ mobile = false, open = false, onOpenChange }: 
               <span className="relative">
                 {item.icon}
                 {pathname === item.href && (
-                  <span className="absolute -right-2 -top-2 w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
+                  // Use a neutral or accent color for the active dot, not blue
+                  <span className="absolute -right-2 -top-2 w-2 h-2 bg-foreground rounded-full animate-pulse" />
                 )}
               </span>
               {!isCollapsed && <span className="ml-3 text-base">{item.label}</span>}

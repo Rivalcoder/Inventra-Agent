@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -46,6 +46,21 @@ export default function QueryPage() {
   const { toast } = useToast();
   const [showSql, setShowSql] = useState(false); // NEW: toggle for SQL query
 
+  // Load history from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem('ai-inventory-query-history');
+    if (stored) {
+      try {
+        setHistory(JSON.parse(stored));
+      } catch {}
+    }
+  }, []);
+
+  // Save history to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('ai-inventory-query-history', JSON.stringify(history));
+  }, [history]);
+
   const processQuery = async () => {
     if (!query.trim()) return;
 
@@ -72,8 +87,19 @@ export default function QueryPage() {
         explanation: 'AI-generated response based on your query and current data',
         rawData: data.data // Include the raw data for potential visualizations
       };
-      console.log(formattedResult);
-      setHistory(prev => [query, ...prev.slice(0, 4)]);
+
+      // Always get the latest history from localStorage
+      let latestHistory: string[] = [];
+      try {
+        const stored = localStorage.getItem('ai-inventory-query-history');
+        if (stored) latestHistory = JSON.parse(stored);
+      } catch {}
+      // Remove duplicate if present
+      latestHistory = latestHistory.filter(q => q !== query);
+      // Add new query to the top, keep max 5
+      const newHistory = [query, ...latestHistory].slice(0, 5);
+      setHistory(newHistory);
+
       setQuery(""); // Clear the input field after successful response
 
       // --- NEW: Execute SQL if present and collect messages ---
@@ -111,6 +137,7 @@ export default function QueryPage() {
               description: err.message || "Failed to execute SQL query.",
               variant: "destructive",
             });
+            break; // Stop executing further queries on first error
           }
         }
       }
@@ -347,16 +374,23 @@ export default function QueryPage() {
             <Card>
               <CardContent className="p-6">
                 <h3 className="font-semibold mb-4">Recent Queries</h3>
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-60 overflow-y-auto">
                   {history.map((historicalQuery, index) => (
-                    <Button
-                      key={index}
-                      variant="outline"
-                      className="w-full py-6 whitespace-pre-wrap  justify-start text-left"
-                      onClick={() => selectFromHistory(historicalQuery)}
-                    >
-                      {historicalQuery}
-                    </Button>
+                    <div key={index} className="relative group">
+                      <Button
+                        variant="outline"
+                        className="w-full min-h-[2.5rem] max-h-10 overflow-hidden text-ellipsis whitespace-nowrap justify-start text-left px-3 py-2 text-sm"
+                        style={{ wordBreak: 'break-all', whiteSpace: 'nowrap' }}
+                        onClick={() => selectFromHistory(historicalQuery)}
+                        title={historicalQuery}
+                      >
+                        {historicalQuery}
+                      </Button>
+                      {/* Tooltip for full query on hover */}
+                      <div className="absolute left-0 z-10 hidden group-hover:block bg-white border border-gray-300 shadow-lg rounded p-2 text-xs max-w-xs max-h-40 overflow-y-auto whitespace-pre-wrap" style={{ top: '110%' }}>
+                        {historicalQuery}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </CardContent>

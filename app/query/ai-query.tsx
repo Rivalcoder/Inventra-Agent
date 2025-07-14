@@ -64,6 +64,7 @@ export default function AIQueryPage() {
             toast.success('Database updated successfully');
           } catch (err: any) {
             toast.error(err.message || 'Failed to execute SQL query');
+            break; // Stop executing further queries on first error
           }
         }
       }

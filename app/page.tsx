@@ -77,13 +77,22 @@ export default function Dashboard() {
         setLowStockProducts(lowStockData);
 
         // Add notifications for low stock products
+        // Prevent duplicate low stock notifications for the same product and stock level
+        let lowStockState: Record<string, { stock: number }> = {};
+        try {
+          const savedLowStockState = localStorage.getItem('lowStockState');
+          if (savedLowStockState) lowStockState = JSON.parse(savedLowStockState);
+        } catch {}
         lowStockData.forEach(product => {
-          addNotification({
-            type: 'low_stock',
-            title: 'Low Stock Alert',
-            message: `${product.name} is running low on stock (${product.stock} units remaining, minimum: ${product.minStock})`,
-            productId: product.id
-          });
+          const prev = lowStockState[product.id];
+          if (!prev || prev.stock !== product.stock) {
+            addNotification({
+              type: 'low_stock',
+              title: 'Low Stock Alert',
+              message: `${product.name} is running low on stock (${product.stock} units remaining, minimum: ${product.minStock})`,
+              productId: product.id
+            });
+          }
         });
 
         setError(null);
@@ -100,8 +109,8 @@ export default function Dashboard() {
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Alert variant="destructive" className="max-w-md">
-          <AlertTriangle className="h-4 w-4" />
+        <Alert variant="destructive" className="max-w-md shadow-lg rounded-xl">
+          <AlertTriangle className="h-5 w-5" />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -112,50 +121,49 @@ export default function Dashboard() {
   return (
     <>
       <LoadingOverlay isLoading={loading} />
-      <div className="p-6 space-y-6">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        
+      <div className="px-2 py-6 md:px-8 md:py-10 max-w-7xl mx-auto w-full space-y-8">
+        <h1 className="text-4xl font-extrabold tracking-tight mb-2">Dashboard</h1>
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <Card className="shadow-md rounded-2xl transition-transform hover:scale-[1.02]">
             <CardHeader>
               <CardTitle>Total Revenue</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">{formatCurrency(stats?.totalRevenue || 0, currency)}</p>
+              <p className="text-2xl font-bold text-primary truncate">{formatCurrency(stats?.totalRevenue || 0, currency)}</p>
               <p className="text-sm text-muted-foreground">
                 {stats?.totalSales || 0} sales this month
               </p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="shadow-md rounded-2xl transition-transform hover:scale-[1.02]">
             <CardHeader>
               <CardTitle>Inventory Value</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">{formatCurrency(stats?.totalValue || 0, currency)}</p>
+              <p className="text-2xl font-bold text-primary truncate">{formatCurrency(stats?.totalValue || 0, currency)}</p>
               <p className="text-sm text-muted-foreground">
                 {stats?.totalStock || 0} units in stock
               </p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="shadow-md rounded-2xl transition-transform hover:scale-[1.02]">
             <CardHeader>
               <CardTitle>Total Sales</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">{stats?.totalSales || 0}</p>
+              <p className="text-2xl font-bold text-primary truncate">{stats?.totalSales || 0}</p>
               <p className="text-sm text-muted-foreground">
                 {stats?.totalQuantity || 0} units sold
               </p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="shadow-md rounded-2xl transition-transform hover:scale-[1.02]">
             <CardHeader>
               <CardTitle>Monthly Revenue</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">{formatCurrency(stats?.totalRevenue || 0, currency)}</p>
+              <p className="text-2xl font-bold text-primary truncate">{formatCurrency(stats?.totalRevenue || 0, currency)}</p>
               <p className="text-sm text-muted-foreground">
                 {stats?.totalSales || 0} sales this month
               </p>
@@ -164,21 +172,24 @@ export default function Dashboard() {
         </div>
 
         {/* Low Stock Alerts */}
-        <Card>
+        <Card className="shadow rounded-xl">
           <CardHeader>
             <CardTitle>Low Stock Alerts</CardTitle>
           </CardHeader>
           <CardContent>
             {lowStockProducts.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-2">
                 {lowStockProducts.map((product) => (
-                  <Alert key={product.id} variant="destructive">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>{product.name}</AlertTitle>
-                    <AlertDescription>
-                      Only {product.stock} units left (Minimum: {product.minStock})
-                    </AlertDescription>
-                  </Alert>
+                  <div
+                    key={product.id}
+                    className="flex items-center gap-3 bg-muted/60 border border-destructive/30 rounded-md px-3 py-2"
+                  >
+                    <AlertTriangle className="h-4 w-4 text-destructive mr-2 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-destructive">{product.name}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">({product.stock} left, min {product.minStock})</span>
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : (
@@ -187,114 +198,126 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Sales Chart */}
-        <Card className="col-span-2">
-          <CardHeader>
-            <CardTitle>Sales Trend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[400px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={salesData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="month" 
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(value) => {
-                      const [year, month] = value.split('-');
-                      return `${month}/${year.slice(2)}`;
-                    }}
-                  />
-                  <YAxis 
-                    yAxisId="left"
-                    tickFormatter={(value) => formatCurrency(value, currency)}
-                  />
-                  <YAxis 
-                    yAxisId="right" 
-                    orientation="right"
-                    tickFormatter={(value) => value.toLocaleString()}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="revenue"
-                    stroke="#8884d8"
-                    name="Revenue"
-                    strokeWidth={2}
-                    dot={{ r: 4 }}
-                    activeDot={{ r: 6 }}
-                  />
-                  <Line
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="quantity"
-                    stroke="#82ca9d"
-                    name="Quantity"
-                    strokeWidth={2}
-                    dot={{ r: 4 }}
-                    activeDot={{ r: 6 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Charts Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Sales Trend Chart */}
+          <Card className="shadow rounded-2xl">
+            <CardHeader>
+              <CardTitle>Sales Trend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[350px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={salesData} margin={{ top: 16, right: 24, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                    <XAxis 
+                      dataKey="month" 
+                      tick={{ fontSize: 13, fill: 'hsl(var(--muted-foreground))' }}
+                      tickFormatter={(value) => {
+                        const [year, month] = value.split('-');
+                        return `${month}/${year.slice(2)}`;
+                      }}
+                    />
+                    <YAxis 
+                      yAxisId="left"
+                      tickFormatter={(value) => formatCurrency(value, currency)}
+                      tick={{ fontSize: 13, fill: 'hsl(var(--muted-foreground))' }}
+                    />
+                    <YAxis 
+                      yAxisId="right" 
+                      orientation="right"
+                      tickFormatter={(value) => value.toLocaleString()}
+                      tick={{ fontSize: 13, fill: 'hsl(var(--muted-foreground))' }}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend />
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="hsl(var(--chart-1))"
+                      name="Revenue"
+                      strokeWidth={3}
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 7 }}
+                    />
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="quantity"
+                      stroke="hsl(var(--chart-2))"
+                      name="Quantity"
+                      strokeWidth={3}
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 7 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
 
-        {/* Top Products Chart */}
-        <Card className="col-span-2">
-          <CardHeader>
-            <CardTitle>Top Products by Revenue</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={topProducts}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="name" 
-                    tick={{ fontSize: 12 }}
-                    angle={-45}
-                    textAnchor="end"
-                    height={70}
-                  />
-                  <YAxis 
-                    tickFormatter={(value) => formatCurrency(value, currency)}
-                  />
-                  <Tooltip 
-                    formatter={(value: number) => formatCurrency(value, currency)}
-                    labelFormatter={(label) => `Product: ${label}`}
-                  />
-                  <Legend />
-                  <Bar 
-                    dataKey="revenue" 
-                    fill="#8884d8" 
-                    name="Revenue"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
+          {/* Top Products Chart */}
+          <Card className="shadow rounded-2xl">
+            <CardHeader>
+              <CardTitle>Top Products by Revenue</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[350px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={topProducts} margin={{ top: 16, right: 24, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                    <XAxis 
+                      dataKey="name" 
+                      tick={{ fontSize: 13, fill: 'hsl(var(--muted-foreground))' }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={70}
+                    />
+                    <YAxis 
+                      tickFormatter={(value) => formatCurrency(value, currency)}
+                      tick={{ fontSize: 13, fill: 'hsl(var(--muted-foreground))' }}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => formatCurrency(value, currency)}
+                      labelFormatter={(label) => `Product: ${label}`}
+                    />
+                    <Legend />
+                    <Bar 
+                      dataKey="revenue" 
+                      fill="hsl(var(--chart-1))" 
+                      name="Revenue"
+                      radius={[8, 8, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Recent Sales */}
-        <Card>
+        <Card className="shadow rounded-2xl">
           <CardHeader>
             <CardTitle>Recent Sales</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
+              {recentSales.length === 0 && (
+                <p className="text-muted-foreground">No recent sales</p>
+              )}
               {recentSales.map((sale) => (
-                <div key={sale.id} className="p-4 bg-gray-50 rounded-lg">
-                  <h3 className="font-semibold">{sale.productName}</h3>
-                  <p className="text-sm text-gray-600">
-                    {sale.quantity} x {formatCurrency(sale.price, currency)} = {formatCurrency(sale.total, currency)}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {new Date(sale.date).toLocaleDateString()}
-                  </p>
+                <div key={sale.id} className="flex flex-col md:flex-row md:items-center md:justify-between p-4 bg-accent/40 rounded-lg transition-shadow hover:shadow-md">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-base md:text-lg">{sale.productName}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {sale.customer} 2 {new Date(sale.date).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="mt-2 md:mt-0 md:ml-4 text-right">
+                    <span className="font-bold text-primary text-lg">{formatCurrency(sale.total, currency)}</span>
+                    <div className="text-xs text-muted-foreground">{sale.quantity} x {formatCurrency(sale.price, currency)}</div>
+                  </div>
                 </div>
               ))}
             </div>
