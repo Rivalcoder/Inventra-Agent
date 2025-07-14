@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Sale } from "@/lib/types";
+import { useCurrency } from "@/lib/context/currency-context";
 
 interface SalesReportTableProps {
   sales: Sale[];
@@ -17,6 +18,8 @@ interface SalesReportTableProps {
 }
 
 export function SalesReportTable({ sales, loading }: SalesReportTableProps) {
+  const { currency } = useCurrency();
+
   if (loading) {
     return <div>Loading sales data...</div>;
   }
@@ -47,10 +50,10 @@ export function SalesReportTable({ sales, loading }: SalesReportTableProps) {
                 <TableCell>{sale.customer || "Anonymous"}</TableCell>
                 <TableCell className="text-center">{sale.quantity}</TableCell>
                 <TableCell className="text-right">
-                  {formatCurrency(sale.price)}
+                  {formatCurrency(sale.price, currency)}
                 </TableCell>
                 <TableCell className="text-right font-medium">
-                  {formatCurrency(sale.total)}
+                  {formatCurrency(sale.total, currency)}
                 </TableCell>
               </TableRow>
             ))}
@@ -76,7 +79,7 @@ export function SalesReportTable({ sales, loading }: SalesReportTableProps) {
             Total Quantity: {totalQuantity}
           </span>
           <span className="text-sm font-bold">
-            Total Revenue: {formatCurrency(totalRevenue)}
+            Total Revenue: {formatCurrency(totalRevenue, currency)}
           </span>
         </div>
       </div>

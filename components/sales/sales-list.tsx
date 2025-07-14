@@ -28,6 +28,7 @@ import {
 import { CalendarIcon, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { useCurrency } from "@/lib/context/currency-context";
 
 interface SalesListProps {
   initialSales?: Sale[];
@@ -43,6 +44,7 @@ export function SalesList({ initialSales }: SalesListProps) {
   }>({});
   const [viewingSale, setViewingSale] = useState<Sale | null>(null);
   const [deletingSale, setDeletingSale] = useState<Sale | null>(null);
+  const { currency } = useCurrency();
 
   // Update local state when initialSales changes
   useEffect(() => {
@@ -125,8 +127,8 @@ export function SalesList({ initialSales }: SalesListProps) {
       date: formatDate(sale.date),
       productName: sale.productName,
       quantity: sale.quantity,
-      price: formatCurrency(sale.price),
-      total: formatCurrency(sale.total),
+      price: formatCurrency(sale.price, currency),
+      total: formatCurrency(sale.total, currency),
       customer: sale.customer || 'Anonymous'
     }));
 
@@ -224,10 +226,10 @@ export function SalesList({ initialSales }: SalesListProps) {
                       {sale.quantity}
                     </TableCell>
                     <TableCell className="text-right">
-                      {formatCurrency(sale.price)}
+                      {formatCurrency(sale.price, currency)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {formatCurrency(sale.total)}
+                      {formatCurrency(sale.total, currency)}
                     </TableCell>
                     <TableCell>{sale.customer || "Anonymous"}</TableCell>
                     <TableCell className="text-right">
@@ -278,7 +280,7 @@ export function SalesList({ initialSales }: SalesListProps) {
             Total Quantity: {totalQuantity}
           </span>
           <span className="text-sm font-bold">
-            Total Revenue: {formatCurrency(totalRevenue)}
+            Total Revenue: {formatCurrency(totalRevenue, currency)}
           </span>
         </div>
       </div>

@@ -10,6 +10,7 @@ import {
 import { Sale } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
+import { useCurrency } from "@/lib/context/currency-context";
 
 interface ViewSaleDialogProps {
   open: boolean;
@@ -22,6 +23,7 @@ export function ViewSaleDialog({
   onOpenChange,
   sale,
 }: ViewSaleDialogProps) {
+  const { currency } = useCurrency();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
@@ -61,7 +63,7 @@ export function ViewSaleDialog({
               <p className="text-sm font-medium text-muted-foreground">
                 Price
               </p>
-              <p className="text-sm">{formatCurrency(sale.price)}</p>
+              <p className="text-sm">{formatCurrency(sale.price, currency)}</p>
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground">
@@ -73,7 +75,7 @@ export function ViewSaleDialog({
               <p className="text-sm font-medium text-muted-foreground">
                 Total
               </p>
-              <p className="text-sm font-bold">{formatCurrency(sale.total)}</p>
+              <p className="text-sm font-bold">{formatCurrency(sale.total, currency)}</p>
             </div>
           </div>
 

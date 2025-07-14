@@ -26,6 +26,7 @@ import { EditProductDialog } from "@/components/inventory/edit-product-dialog";
 import { DeleteProductDialog } from "@/components/inventory/delete-product-dialog";
 import { AddProductDialog } from "@/components/inventory/add-product-dialog";
 import { createProduct, postToApi } from "@/lib/data";
+import { useCurrency } from "@/lib/context/currency-context";
 
 interface InventoryListProps {
   initialProducts: Product[];
@@ -39,6 +40,7 @@ export function InventoryList({ initialProducts }: InventoryListProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
+  const { currency } = useCurrency();
 
   // Get unique categories for filter
   const categories = Array.from(
@@ -175,7 +177,7 @@ export function InventoryList({ initialProducts }: InventoryListProps) {
                     </TableCell>
                     <TableCell>{product.category}</TableCell>
                     <TableCell className="text-right">
-                      {formatCurrency(product.price)}
+                      {formatCurrency(product.price, currency)}
                     </TableCell>
                     <TableCell className="text-center">
                       <span

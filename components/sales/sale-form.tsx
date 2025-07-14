@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { getProducts } from "@/lib/data";
 import { formatCurrency } from "@/lib/utils";
 import { toast } from "react-hot-toast";
+import { useCurrency } from "@/lib/context/currency-context";
 
 const saleSchema = z.object({
   productId: z.string({
@@ -55,6 +56,7 @@ export function SaleForm({ onSubmit, submitLabel = "Submit" }: SaleFormProps) {
   const [totalPrice, setTotalPrice] = useState<number | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const { currency } = useCurrency();
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -163,7 +165,7 @@ export function SaleForm({ onSubmit, submitLabel = "Submit" }: SaleFormProps) {
                 <SelectContent>
                   {products.map((product) => (
                     <SelectItem key={product.id} value={product.id}>
-                      {product.name} ({formatCurrency(product.price)})
+                      {product.name} ({formatCurrency(product.price, currency)})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -219,11 +221,11 @@ export function SaleForm({ onSubmit, submitLabel = "Submit" }: SaleFormProps) {
             <p className="text-sm text-muted-foreground">
               Price per unit:{" "}
               <span className="font-medium text-foreground">
-                {formatCurrency(selectedProductPrice || 0)}
+                {formatCurrency(selectedProductPrice || 0, currency)}
               </span>
             </p>
             <p className="text-sm font-bold">
-              Total: {formatCurrency(totalPrice)}
+              Total: {formatCurrency(totalPrice, currency)}
             </p>
           </div>
         )}

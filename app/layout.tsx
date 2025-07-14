@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/sonner';
 import Header from '@/components/layout/header';
 import Sidebar from '@/components/layout/sidebar';
 import { NotificationProvider } from '@/lib/context/notification-context';
+import { CurrencyProvider } from '@/lib/context/currency-context';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -28,6 +29,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <CurrencyProvider>
           <NotificationProvider>
             <div className="min-h-screen flex flex-col">
               <Header />
@@ -38,6 +40,7 @@ export default function RootLayout({
             </div>
             <Toaster />
           </NotificationProvider>
+          </CurrencyProvider>
         </ThemeProvider>
       </body>
     </html>

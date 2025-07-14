@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/utils";
 import { Product } from "@/lib/types";
+import { useCurrency } from "@/lib/context/currency-context";
 
 interface InventoryReportTableProps {
   products: Product[];
@@ -17,6 +18,8 @@ interface InventoryReportTableProps {
 }
 
 export function InventoryReportTable({ products, loading }: InventoryReportTableProps) {
+  const { currency } = useCurrency();
+
   if (loading) {
     return <div>Loading inventory data...</div>;
   }
@@ -51,10 +54,10 @@ export function InventoryReportTable({ products, loading }: InventoryReportTable
                 <TableCell>{product.category}</TableCell>
                 <TableCell className="text-right">{product.stock}</TableCell>
                 <TableCell className="text-right">
-                  {formatCurrency(product.price)}
+                  {formatCurrency(product.price, currency)}
                 </TableCell>
                 <TableCell className="text-right font-medium">
-                  {formatCurrency(product.value)}
+                  {formatCurrency(product.value, currency)}
                 </TableCell>
               </TableRow>
             ))}
@@ -80,7 +83,7 @@ export function InventoryReportTable({ products, loading }: InventoryReportTable
             Total Stock: {totalStock} units
           </span>
           <span className="text-sm font-bold">
-            Total Inventory Value: {formatCurrency(totalValue)}
+            Total Inventory Value: {formatCurrency(totalValue, currency)}
           </span>
         </div>
       </div>

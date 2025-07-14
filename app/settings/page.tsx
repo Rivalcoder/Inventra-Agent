@@ -17,6 +17,7 @@ import type { Settings as SettingsType } from "@/lib/types";
 import { useNotifications } from "@/lib/context/notification-context";
 import Image from "next/image";
 import JSZip from "jszip";
+import { useCurrency } from '@/lib/context/currency-context';
 
 interface SettingsData {
   companyName: string;
@@ -207,6 +208,7 @@ export default function SettingsPage() {
   });
   const { addNotification } = useNotifications();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { setCurrency } = useCurrency();
 
   // Add new state for backup
   const [selectedPath, setSelectedPath] = useState('');
@@ -321,6 +323,8 @@ export default function SettingsPage() {
       // Reload settings after saving
       await loadSettings();
       toast.success("Settings saved successfully");
+      // After saving settings, update currency context
+      setCurrency(settings.currency.toUpperCase());
     } catch (error) {
       console.error('Error saving settings:', error);
       toast.error("Failed to save settings");
@@ -601,7 +605,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="p-4 md:p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">

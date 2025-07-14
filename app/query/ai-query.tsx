@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { runSqlQuery } from "@/lib/data";
 
 // Define the schema for the response
 const responseSchema = z.object({
@@ -53,6 +54,20 @@ export default function AIQueryPage() {
 
       setResponse(validatedResponse);
       toast.success('Query processed successfully');
+
+      // --- NEW: Execute SQL if present ---
+      const sqlQueries = validatedResponse?.Topic?.SqlQuery;
+      if (Array.isArray(sqlQueries) && sqlQueries.length > 0) {
+        for (const sql of sqlQueries) {
+          try {
+            const execResult = await runSqlQuery(sql);
+            toast.success('Database updated successfully');
+          } catch (err: any) {
+            toast.error(err.message || 'Failed to execute SQL query');
+          }
+        }
+      }
+      // --- END NEW ---
     } catch (error: any) {
       console.error('Error processing query:', error);
       toast.error(error.message || 'Failed to process query');
@@ -62,7 +77,7 @@ export default function AIQueryPage() {
   };
 
   return (
-    <div className="container mx-auto p-6">
+    <div className="p-4 md:p-6">
       <Card className="w-full">
         <CardHeader>
           <CardTitle>AI-Powered Query</CardTitle>

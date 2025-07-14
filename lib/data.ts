@@ -186,3 +186,8 @@ export async function deleteSetting(key: string): Promise<{ success: boolean }> 
     throw error;
   }
 }
+
+// Run a raw SQL query (for AI-generated queries)
+export async function runSqlQuery(sql: string) {
+  return postToApi('run-sql', { sql });
+}

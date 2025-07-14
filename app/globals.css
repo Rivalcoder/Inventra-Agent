@@ -2,6 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+html, body {
+  overflow-x: hidden;
+}
+
+/* Modern, subtle scrollbar for all browsers */
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+  background: #f3f4f6;
+}
+::-webkit-scrollbar-thumb {
+  background: #c7d2fe;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a5b4fc;
+}
+
+/* For Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c7d2fe #f3f4f6;
+}
+
 :root {
   --foreground-rgb: 0, 0, 0;
   --background-start-rgb: 214, 219, 220;

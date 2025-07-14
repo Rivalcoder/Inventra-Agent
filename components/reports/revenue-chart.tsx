@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { Sale } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/lib/context/currency-context";
 
 interface RevenueChartProps {
   sales: Sale[];
@@ -22,6 +23,7 @@ interface RevenueChartProps {
 export function RevenueChart({ sales, loading }: RevenueChartProps) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
+  const { currency } = useCurrency();
 
   if (loading) {
     return <div>Loading revenue data...</div>;
@@ -80,13 +82,13 @@ export function RevenueChart({ sales, loading }: RevenueChartProps) {
             tickLine={false}
           />
           <YAxis
-            tickFormatter={(value) => formatCurrency(value)}
+            tickFormatter={(value) => formatCurrency(value, currency)}
             tick={{ fill: isDark ? "hsl(var(--muted-foreground))" : "#888" }}
             axisLine={{ stroke: isDark ? "hsl(var(--muted))" : "#f0f0f0" }}
             tickLine={false}
           />
           <Tooltip
-            formatter={(value) => [formatCurrency(value as number), ""]}
+            formatter={(value) => [formatCurrency(value as number, currency), ""]}
             contentStyle={{
               backgroundColor: isDark ? "hsl(var(--card))" : "#fff",
               borderColor: isDark ? "hsl(var(--border))" : "#f0f0f0",

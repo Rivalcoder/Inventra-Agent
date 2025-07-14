@@ -30,22 +30,7 @@ import {
   BarChart,
   Bar
 } from 'recharts';
-
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-white p-4 border rounded-lg shadow-lg">
-        <p className="font-semibold">{label}</p>
-        {payload.map((entry: any, index: number) => (
-          <p key={index} style={{ color: entry.color }}>
-            {entry.name}: {entry.name === 'Revenue' ? formatCurrency(entry.value) : entry.value}
-          </p>
-        ))}
-      </div>
-    );
-  }
-  return null;
-};
+import { useCurrency } from "@/lib/context/currency-context";
 
 export default function Dashboard() {
   const [stats, setStats] = useState<any>(null);
@@ -56,6 +41,23 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { addNotification } = useNotifications();
+  const { currency } = useCurrency();
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-4 border rounded-lg shadow-lg">
+          <p className="font-semibold">{label}</p>
+          {payload.map((entry: any, index: number) => (
+            <p key={index} style={{ color: entry.color }}>
+              {entry.name}: {entry.name === 'Revenue' ? formatCurrency(entry.value, currency) : entry.value}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
 
   useEffect(() => {
     async function loadData() {
@@ -120,7 +122,7 @@ export default function Dashboard() {
               <CardTitle>Total Revenue</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">{formatCurrency(stats?.totalRevenue || 0)}</p>
+              <p className="text-2xl font-bold">{formatCurrency(stats?.totalRevenue || 0, currency)}</p>
               <p className="text-sm text-muted-foreground">
                 {stats?.totalSales || 0} sales this month
               </p>
@@ -131,7 +133,7 @@ export default function Dashboard() {
               <CardTitle>Inventory Value</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">{formatCurrency(stats?.totalValue || 0)}</p>
+              <p className="text-2xl font-bold">{formatCurrency(stats?.totalValue || 0, currency)}</p>
               <p className="text-sm text-muted-foreground">
                 {stats?.totalStock || 0} units in stock
               </p>
@@ -153,7 +155,7 @@ export default function Dashboard() {
               <CardTitle>Monthly Revenue</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">{formatCurrency(stats?.totalRevenue || 0)}</p>
+              <p className="text-2xl font-bold">{formatCurrency(stats?.totalRevenue || 0, currency)}</p>
               <p className="text-sm text-muted-foreground">
                 {stats?.totalSales || 0} sales this month
               </p>
@@ -205,7 +207,7 @@ export default function Dashboard() {
                   />
                   <YAxis 
                     yAxisId="left"
-                    tickFormatter={(value) => formatCurrency(value)}
+                    tickFormatter={(value) => formatCurrency(value, currency)}
                   />
                   <YAxis 
                     yAxisId="right" 
@@ -258,10 +260,10 @@ export default function Dashboard() {
                     height={70}
                   />
                   <YAxis 
-                    tickFormatter={(value) => formatCurrency(value)}
+                    tickFormatter={(value) => formatCurrency(value, currency)}
                   />
                   <Tooltip 
-                    formatter={(value: number) => formatCurrency(value)}
+                    formatter={(value: number) => formatCurrency(value, currency)}
                     labelFormatter={(label) => `Product: ${label}`}
                   />
                   <Legend />
@@ -288,7 +290,7 @@ export default function Dashboard() {
                 <div key={sale.id} className="p-4 bg-gray-50 rounded-lg">
                   <h3 className="font-semibold">{sale.productName}</h3>
                   <p className="text-sm text-gray-600">
-                    {sale.quantity} x {formatCurrency(sale.price)} = {formatCurrency(sale.total)}
+                    {sale.quantity} x {formatCurrency(sale.price, currency)} = {formatCurrency(sale.total, currency)}
                   </p>
                   <p className="text-xs text-gray-500">
                     {new Date(sale.date).toLocaleDateString()}

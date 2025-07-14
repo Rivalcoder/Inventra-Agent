@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
+import { useCurrency } from "@/lib/context/currency-context";
 
 interface TopProduct {
   id: string;
@@ -21,6 +22,7 @@ interface TopProductsTableProps {
 }
 
 export function TopProductsTable({ products }: TopProductsTableProps) {
+  const { currency } = useCurrency();
   return (
     <Card>
       <CardHeader>
@@ -41,7 +43,7 @@ export function TopProductsTable({ products }: TopProductsTableProps) {
                 <TableCell className="font-medium">{product.name}</TableCell>
                 <TableCell className="text-right">{product.sales}</TableCell>
                 <TableCell className="text-right">
-                  {formatCurrency(product.revenue)}
+                  {formatCurrency(product.revenue, currency)}
                 </TableCell>
               </TableRow>
             ))}

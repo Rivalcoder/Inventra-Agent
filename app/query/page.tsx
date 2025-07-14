@@ -8,6 +8,8 @@ import { SendHorizontal, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { runSqlQuery } from "@/lib/data";
+import { Toggle } from "@/components/ui/toggle";
 
 interface QueryResult {
   data: {
@@ -20,6 +22,7 @@ interface QueryResult {
   type: string;
   explanation: string;
   rawData: any;
+  dbHeadline?: string; // Added for DB change headline
 }
 
 const exampleQuestions = [
@@ -41,6 +44,7 @@ export default function QueryPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const { toast } = useToast();
+  const [showSql, setShowSql] = useState(false); // NEW: toggle for SQL query
 
   const processQuery = async () => {
     if (!query.trim()) return;
@@ -69,14 +73,68 @@ export default function QueryPage() {
         rawData: data.data // Include the raw data for potential visualizations
       };
       console.log(formattedResult);
-      setResult(formattedResult);
       setHistory(prev => [query, ...prev.slice(0, 4)]);
       setQuery(""); // Clear the input field after successful response
+
+      // --- NEW: Execute SQL if present and collect messages ---
+      const sqlQueries = data.response?.Topic?.SqlQuery;
+      let dbChangeMessages: string[] = [];
+      let dbHeadline: string | null = null;
+      if (Array.isArray(sqlQueries) && sqlQueries.length > 0) {
+        for (const sql of sqlQueries) {
+          try {
+            const execResult = await runSqlQuery(sql);
+            if (/^insert/i.test(sql)) {
+              dbChangeMessages.push("Product added successfully.");
+              dbHeadline = "Product added successfully.";
+            } else if (/^update/i.test(sql)) {
+              dbChangeMessages.push("Product updated successfully.");
+              dbHeadline = "Product updated successfully.";
+            } else if (/^delete/i.test(sql)) {
+              dbChangeMessages.push("Product deleted successfully.");
+              dbHeadline = "Product deleted successfully.";
+            } else {
+              dbChangeMessages.push("Database updated successfully.");
+              dbHeadline = "Database updated successfully.";
+            }
+            toast({
+              title: "Database Updated",
+              description: `Query executed successfully.`,
+              variant: "success",
+            });
+          } catch (err: any) {
+            const errMsg = "Database error: " + (err.message || "Failed to execute SQL query.");
+            dbChangeMessages.push(errMsg);
+            dbHeadline = errMsg;
+            toast({
+              title: "Database Error",
+              description: err.message || "Failed to execute SQL query.",
+              variant: "destructive",
+            });
+          }
+        }
+      }
+      // --- END NEW ---
+
+      // --- NEW: Update result with DB change messages and headline ---
+      setResult({
+        ...formattedResult,
+        explanation: [
+          formattedResult.explanation,
+          ...dbChangeMessages
+        ].filter(Boolean).join("\n\n"),
+        dbHeadline: dbHeadline || undefined
+      });
+      // --- END NEW ---
     } catch (error: any) {
       console.error('Query processing error:', error);
+      let message = error.message || "Failed to process your query. Please try again.";
+      if (message.toLowerCase().includes("model is overloaded") || message.toLowerCase().includes("unavailable")) {
+        message = "The AI service is currently overloaded. Please try again in a few minutes.";
+      }
       toast({
         title: "Error",
-        description: error.message || "Failed to process your query. Please try again.",
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -94,7 +152,7 @@ export default function QueryPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="p-4 md:p-6 space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">AI Query Console</h1>
         <p className="text-muted-foreground">
@@ -136,6 +194,9 @@ export default function QueryPage() {
             <div className="mt-6">
               {result && (
                 <div className="space-y-6">
+                  {result.dbHeadline && (
+                    <div className="text-green-700 text-2xl font-bold mb-4">{result.dbHeadline}</div>
+                  )}
                   <div className="bg-white rounded-lg shadow p-6">
                     <h2 className="text-2xl font-bold text-gray-900 mb-4">
                       {result.data.Topic.Heading}
@@ -249,17 +310,30 @@ export default function QueryPage() {
                           `}</style>
                         </div>
                       )}
-                      {result.data.Topic.SqlQuery && result.data.Topic.SqlQuery.length > 0 && (
-                        <div className="mt-4">
-                          <h3 className="text-lg font-medium mb-2">SQL Query</h3>
-                          <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 overflow-x-auto">
-                            <pre className="text-sm font-mono">
-                              {result.data.Topic.SqlQuery.join('\n')}
-                            </pre>
-                          </div>
+                      {/* Show explanation if present */}
+                      {result.explanation && (
+                        <div className="text-gray-600 dark:text-gray-400 text-sm whitespace-pre-line">
+                          {result.explanation}
                         </div>
                       )}
                     </div>
+                    {/* SQL Query Toggle placed below all content */}
+                    {Array.isArray(result.data.Topic.SqlQuery) && result.data.Topic.SqlQuery.length > 0 && (
+                      <div className="mt-8">
+                        <Toggle
+                          pressed={showSql}
+                          onPressedChange={setShowSql}
+                          className="mb-2"
+                        >
+                          Show SQL Query
+                        </Toggle>
+                        {showSql && (
+                          <pre className="bg-gray-100 dark:bg-gray-800 rounded p-4 mt-2 text-xs overflow-x-auto">
+                            {result.data.Topic.SqlQuery.join('\n\n')}
+                          </pre>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

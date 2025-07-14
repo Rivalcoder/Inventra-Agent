@@ -886,6 +886,24 @@ export async function POST(request: Request) {
           });
         }
 
+      case 'run-sql':
+        // SECURITY WARNING: Only allow safe queries (INSERT, UPDATE, DELETE) and never SELECT/DROP/ALTER
+        const { sql } = body;
+        if (!sql || typeof sql !== 'string') {
+          return NextResponse.json({ error: 'SQL query is required' }, { status: 400 });
+        }
+        // Basic check: only allow INSERT, UPDATE, DELETE
+        const allowed = /^(insert|update|delete)\s/i.test(sql.trim());
+        if (!allowed) {
+          return NextResponse.json({ error: 'Only INSERT, UPDATE, DELETE queries are allowed.' }, { status: 400 });
+        }
+        try {
+          const [result] = await pool.query(sql);
+          return NextResponse.json({ success: true, result });
+        } catch (err: any) {
+          return NextResponse.json({ error: err.message || 'SQL execution failed' }, { status: 500 });
+        }
+
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }

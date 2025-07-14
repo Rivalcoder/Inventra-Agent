@@ -43,7 +43,6 @@ export async function POST(req: Request) {
       console.log('Attempting to generate AI response...');
       const { object } = await generateObject({
         model: google('gemini-1.5-flash'),
-        apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
         schema: z.object({
           Topic: z.object({
             Heading: z.string(),
@@ -55,6 +54,10 @@ export async function POST(req: Request) {
                 ${JSON.stringify(context)}
                 
                 User Query: ${query}
+                
+                # IMPORTANT:
+                - Do NOT include the SQL query in the Heading or Description fields.
+                - Only provide the SQL query in the SqlQuery field of the response.
                 
                 # If user Ask About The Datas Answer The Question By Viewing The datas and Db  Structure Give The Answers
                 # If User Ask To Add Update Or Delete The Data:
