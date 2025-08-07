@@ -19,22 +19,20 @@ export default function LandingLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <CurrencyProvider>
-            <NotificationProvider>
-              {children}
-              <Toaster />
-            </NotificationProvider>
-          </CurrencyProvider>
-        </ThemeProvider>
-      </body>
-    </html>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="system"
+      enableSystem
+      disableTransitionOnChange
+    >
+      <CurrencyProvider>
+        <NotificationProvider>
+          <div className={inter.className}>
+            {children}
+            <Toaster />
+          </div>
+        </NotificationProvider>
+      </CurrencyProvider>
+    </ThemeProvider>
   );
 } 

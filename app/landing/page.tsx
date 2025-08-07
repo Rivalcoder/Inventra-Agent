@@ -232,7 +232,7 @@ export default function LandingPage() {
 
         {/* Main Content */}
         <div className="flex-1 flex items-center justify-center px-6">
-          <div className="max-w-7xl mx-auto text-center">
+          <div className="max-w-7xl mx-auto text-center mt-16">
             {/* Hero Section */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
