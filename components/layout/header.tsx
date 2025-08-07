@@ -2,7 +2,7 @@
 
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
-import { MoonIcon, SunIcon, UserIcon, Building2 } from "lucide-react";
+import { MoonIcon, SunIcon, UserIcon, Building2, LogOut } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { updateSetting, getSettings } from "@/lib/data";
 import { toast } from "sonner";
 import { NotificationDropdown } from "@/components/notifications/notification-dropdown";
@@ -28,6 +29,7 @@ import Sidebar from "./sidebar";
 
 export default function Header() {
   const { theme, setTheme } = useTheme();
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [logo, setLogo] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState<string>('');
@@ -67,6 +69,12 @@ export default function Header() {
       console.error('Error updating theme:', error);
       toast.error('Failed to update theme');
     }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('isAuthenticated');
+    toast.success('Logged out successfully');
+    router.push('/landing');
   };
 
   if (!mounted) {
@@ -161,6 +169,11 @@ export default function Header() {
                         <Building2 className="mr-2 h-4 w-4" />
                         <span>Settings</span>
                       </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout} className="flex items-center text-red-600 focus:text-red-600">
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Logout</span>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

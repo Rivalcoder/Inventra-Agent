@@ -11,9 +11,8 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   images: { unoptimized: true },
-  env: {
-    GOOGLE_GENERATIVE_AI_API_KEY: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-  },
+  // Environment variables are automatically loaded by Next.js
+  // No need to explicitly define them here
 };
 
 module.exports = nextConfig;

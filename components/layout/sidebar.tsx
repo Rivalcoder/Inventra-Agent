@@ -49,7 +49,7 @@ export default function Sidebar({ mobile = false, open = false, onOpenChange }: 
 
   const navItems: NavItem[] = [
     {
-      href: "/",
+      href: "/dashboard",
       icon: <LayoutDashboard size={20} />,
       label: "Dashboard",
     },
@@ -110,8 +110,8 @@ export default function Sidebar({ mobile = false, open = false, onOpenChange }: 
                 pathname === item.href && "bg-muted text-foreground shadow border border-border",
                 isCollapsed ? "justify-center" : "justify-start"
               )}
-              onClick={item.href === '/' ? (e) => {
-                if (pathname === '/') {
+              onClick={item.href === '/dashboard' ? (e) => {
+                if (pathname === '/dashboard') {
                   e.preventDefault();
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }

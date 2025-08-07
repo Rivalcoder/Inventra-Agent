@@ -3,9 +3,15 @@ import { generateObject } from 'ai';
 import { z } from 'zod';
 import { NextResponse } from 'next/server';
 import { getProducts, getSales, getDashboardStats, getTopProducts, getLowStockProducts } from '@/lib/data';
-// Use the API key directly
-const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+
+// Use the API key directly - Next.js automatically loads environment variables
+const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || "AIzaSyCrUswVG1023WIqnf8a9EI4kGU7yeOiyaY";
 console.log('API Key available:', !!apiKey); // This will log true if the key exists, false if it doesn't
+console.log('API Key length:', apiKey ? apiKey.length : 0);
+console.log('API Key first 10 chars:', apiKey ? apiKey.substring(0, 10) + '...' : 'undefined');
+console.log('All env vars:', Object.keys(process.env).filter(key => key.includes('GOOGLE')));
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('Environment variables loaded:', Object.keys(process.env).length);
 
 // Helper function to format date for MySQL
 function formatDateForMySQL(date: Date): string {
@@ -45,11 +51,25 @@ export async function POST(req: Request) {
       lowStock,
       now: formatDateForMySQL(now) // Pass current datetime in MySQL format
     };
-
+    console.log('API Key available:', process.env.GOOGLE_GENERATIVE_AI_API_KEY); 
+    
+    // Check if API key is available
+    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY && !apiKey) {
+      console.error('GOOGLE_GENERATIVE_AI_API_KEY is not available');
+      return NextResponse.json(
+        { 
+          error: 'AI service configuration error',
+          details: 'Google AI API key is not configured'
+        },
+        { status: 500 }
+      );
+    }
+    
     try {
       console.log('Attempting to generate AI response...');
       const { object } = await generateObject({
-        model: google('gemini-1.5-flash'),
+        model: google('gemini-2.5-flash-lite'),
+        apiKey: apiKey,
         schema: z.object({
           Topic: z.object({
             Heading: z.string(),
@@ -81,7 +101,9 @@ export async function POST(req: Request) {
                 # 1. First check if all necessary information is provided
                 # 2. If information is missing, ask for it in the Description
                 # 3. Only provide SQL query when all required information is available
-
+                
+                # Additional Rule:
+                - If the SQL query returns no results (empty set), respond with a clear message such as "No data found for the selected period" and do not show a SQL error.
                 
                 # Response Guidelines:
                 1). Heading:
@@ -253,6 +275,15 @@ export async function POST(req: Request) {
                     - Keep design consistent
                `
       });
+
+      // Post-process the AI response for empty or error results
+      if (
+        !object?.Topic?.Description ||
+        /empty set|no data|no results|no sales|no records|not found|no matching/i.test(object.Topic.Description)
+      ) {
+        object.Topic.Heading = "No Data Found";
+        object.Topic.Description = "No sales data found for the selected period.";
+      }
 
       console.log('Successfully generated AI response');
       return NextResponse.json({ 
