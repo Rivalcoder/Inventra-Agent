@@ -171,7 +171,7 @@ export function QueryResultDisplay({ result }: QueryResultDisplayProps) {
             blockquote: ({ node, ...props }) => (
               <blockquote className="border-l-4 border-blue-500 pl-4 py-1 my-2 text-sm text-gray-600 dark:text-gray-300 italic" {...props} />
             ),
-            code: ({ node, inline, ...props }) => (
+            code: ({ node, inline, ...props }: any) => (
               inline ? 
                 <code className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-sm font-mono" {...props} /> :
                 <code className="block p-3 rounded bg-gray-100 dark:bg-gray-800 text-sm font-mono overflow-x-auto" {...props} />

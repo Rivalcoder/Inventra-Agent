@@ -7,12 +7,13 @@ import {
   Settings
 } from '@/lib/types';
 import { getApiBase } from './utils';
+import { ApiClient } from './utils/api-client';
 
 // Helper function to fetch data from API
 async function fetchFromApi(endpoint: string, params: Record<string, string> = {}) {
   try {
     const searchParams = new URLSearchParams({ action: endpoint, ...params });
-    const response = await fetch(`${getApiBase()}/api/db?${searchParams}`);
+    const response = await ApiClient.get(`${getApiBase()}/api/db?${searchParams}`);
     if (!response.ok) {
       throw new Error(`API error: ${response.statusText}`);
     }
@@ -30,13 +31,7 @@ export async function postToApi(endpoint: string, data: any) {
     if (endpoint === 'run-sql') {
       console.log('[runSqlQuery] Sending SQL:', data.sql);
     }
-    const response = await fetch(`${getApiBase()}/api/db?${searchParams}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
+    const response = await ApiClient.post(`${getApiBase()}/api/db?${searchParams}`, data);
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`[postToApi] API error: ${response.status} ${response.statusText}. Response:`, errorText);

@@ -10,7 +10,6 @@ export async function GET() {
     
     const { text } = await generateText({
       model: google('gemini-2.0-flash-exp'),
-      apiKey: apiKey,
       prompt: 'Say "Hello World"',
     });
 

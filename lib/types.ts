@@ -27,9 +27,12 @@ export interface Sale {
 // Dashboard Types
 export interface DashboardStats {
   totalSales: number;
-  totalProducts: number;
-  lowStockItems: number;
+  totalQuantity: number;
   totalRevenue: number;
+  totalProducts: number;
+  totalStock: number;
+  totalValue: number;
+  lowStockItems?: number;
 }
 
 export interface SalesByPeriod {

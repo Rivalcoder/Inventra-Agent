@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 import { getSettings } from '@/lib/data';
 import { sendEmailNotification, formatLowStockEmail, formatSalesReportEmail } from '@/lib/utils/email';
 
-export type NotificationType = 'info' | 'success' | 'warning' | 'error' | 'low_stock' | 'system';
+export type NotificationType = 'info' | 'success' | 'warning' | 'error' | 'low_stock' | 'system' | 'sales_report';
 
 export interface Notification {
   id: string;
@@ -160,14 +160,20 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       if (notification.type === 'low_stock' && settings?.low_stock_alerts === true) {
         const emailContent = formatLowStockEmail(notification);
         try {
-          await sendEmailNotification(emailContent);
+          await sendEmailNotification({
+            to: settings?.email || '',
+            ...emailContent
+          });
         } catch (error) {
           console.error('Error sending email notification:', error);
         }
       } else if (notification.type === 'sales_report' && settings?.sales_reports === true) {
         const emailContent = formatSalesReportEmail(notification);
         try {
-          await sendEmailNotification(emailContent);
+          await sendEmailNotification({
+            to: settings?.email || '',
+            ...emailContent
+          });
         } catch (error) {
           console.error('Error sending email notification:', error);
         }

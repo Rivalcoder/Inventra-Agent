@@ -33,6 +33,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { airtableService } from '@/lib/services/airtable';
 import { configService } from '@/lib/services/config';
+import { DatabaseConfigComponent } from '@/components/auth/database-config';
+import { DatabaseConfig as DBConfig } from '@/lib/types/database';
 
 // Local authentication service (same as in signin)
 class LocalAuthService {
@@ -88,69 +90,13 @@ class LocalAuthService {
 
 const localAuthService = new LocalAuthService();
 
-interface DatabaseConfig {
-  name: string;
-  icon: any;
-  description: string;
-  fields: Array<{
-    name: string;
-    label: string;
-    placeholder: string;
-    type: string;
-    defaultValue?: string;
-  }>;
-}
 
-const databaseConfigs: Record<string, DatabaseConfig> = {
-  mysql: {
-    name: "MySQL",
-    icon: Database,
-    description: "Popular relational database with ACID compliance",
-    fields: [
-      { name: "host", label: "Database Host", placeholder: "localhost", type: "text", defaultValue: "localhost" },
-      { name: "port", label: "Port", placeholder: "3306", type: "text", defaultValue: "3306" },
-      { name: "database", label: "Database Name", placeholder: "inventory_db", type: "text", defaultValue: "inventory_db" },
-      { name: "username", label: "Username", placeholder: "root", type: "text", defaultValue: "root" },
-      { name: "password", label: "Password", placeholder: "Enter your password", type: "password" }
-    ]
-  },
-  postgresql: {
-    name: "PostgreSQL",
-    icon: Database,
-    description: "Advanced open-source database with JSON support",
-    fields: [
-      { name: "host", label: "Database Host", placeholder: "localhost", type: "text", defaultValue: "localhost" },
-      { name: "port", label: "Port", placeholder: "5432", type: "text", defaultValue: "5432" },
-      { name: "database", label: "Database Name", placeholder: "inventory_db", type: "text", defaultValue: "inventory_db" },
-      { name: "username", label: "Username", placeholder: "postgres", type: "text", defaultValue: "postgres" },
-      { name: "password", label: "Password", placeholder: "Enter your password", type: "password" }
-    ]
-  },
-  mongodb: {
-    name: "MongoDB",
-    icon: Globe,
-    description: "NoSQL database with flexible document storage",
-    fields: [
-      { name: "uri", label: "MongoDB URI", placeholder: "mongodb://localhost:27017", type: "text", defaultValue: "mongodb://localhost:27017" },
-      { name: "database", label: "Database Name", placeholder: "inventory_db", type: "text", defaultValue: "inventory_db" },
-      { name: "username", label: "Username", placeholder: "Enter username", type: "text" },
-      { name: "password", label: "Password", placeholder: "Enter your password", type: "password" }
-    ]
-  },
-  sqlite: {
-    name: "SQLite",
-    icon: Database,
-    description: "Lightweight, serverless database",
-    fields: [
-      { name: "database", label: "Database File", placeholder: "inventory.db", type: "text", defaultValue: "inventory.db" }
-    ]
-  }
-};
+
+
 
 export default function SignUpPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
-  const [selectedDatabase, setSelectedDatabase] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -158,14 +104,25 @@ export default function SignUpPage() {
   const [success, setSuccess] = useState('');
   const [authMode, setAuthMode] = useState<'airtable' | 'local'>(configService.getAuthMode());
   const [isDemoMode, setIsDemoMode] = useState(configService.isDemoMode());
+  const [databaseConfig, setDatabaseConfig] = useState<DBConfig>({
+    type: 'mysql',
+    host: 'localhost',
+    port: 3306,
+    username: 'root',
+    password: '',
+    database: 'ai_inventory',
+    options: {
+      ssl: false,
+      connectionLimit: 10,
+      charset: 'utf8mb4'
+    }
+  });
 
   const [formData, setFormData] = useState({
     username: '',
     email: '',
     password: '',
-    confirmPassword: '',
-    databaseType: '',
-    databaseConfig: {} as Record<string, string>
+    confirmPassword: ''
   });
 
   // Update auth mode when it changes
@@ -174,30 +131,33 @@ export default function SignUpPage() {
   }, [authMode]);
 
   const handleInputChange = (field: string, value: string) => {
-    if (field.startsWith('db_')) {
-      const dbField = field.replace('db_', '');
-      setFormData(prev => ({
-        ...prev,
-        databaseConfig: {
-          ...prev.databaseConfig,
-          [dbField]: value
-        }
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [field]: value
-      }));
-    }
-  };
-
-  const handleDatabaseSelect = (dbType: string) => {
-    setSelectedDatabase(dbType);
     setFormData(prev => ({
       ...prev,
-      databaseType: dbType,
-      databaseConfig: {}
+      [field]: value
     }));
+  };
+
+  const handleDatabaseConfigChange = (config: DBConfig) => {
+    setDatabaseConfig(config);
+  };
+
+  const handleTestConnection = async (config: DBConfig): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/db/test-connection', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-db-config': JSON.stringify(config),
+        },
+        body: JSON.stringify(config),
+      });
+
+      const result = await response.json();
+      return result.success;
+    } catch (error) {
+      console.error('Connection test failed:', error);
+      return false;
+    }
   };
 
   const validateStep1 = () => {
@@ -221,17 +181,9 @@ export default function SignUpPage() {
   };
 
   const validateStep2 = () => {
-    if (!selectedDatabase) {
-      setError('Please select a database type');
+    if (!databaseConfig.host || !databaseConfig.database) {
+      setError('Please configure your database settings');
       return false;
-    }
-    
-    const config = databaseConfigs[selectedDatabase];
-    for (const field of config.fields) {
-      if (!formData.databaseConfig[field.name]) {
-        setError(`Please fill in ${field.label}`);
-        return false;
-      }
     }
     return true;
   };
@@ -254,8 +206,18 @@ export default function SignUpPage() {
         username: formData.username,
         email: formData.email,
         password: formData.password, // In real app, hash this
-        databaseType: selectedDatabase,
-        databaseConfig: formData.databaseConfig,
+        databaseType: databaseConfig.type,
+        databaseConfig: {
+          type: databaseConfig.type,
+          host: databaseConfig.host,
+          port: databaseConfig.port.toString(),
+          username: databaseConfig.username,
+          password: databaseConfig.password,
+          database: databaseConfig.database,
+          ssl: databaseConfig.options?.ssl?.toString() || 'false',
+          connectionLimit: databaseConfig.options?.connectionLimit?.toString() || '10',
+          charset: databaseConfig.options?.charset || 'utf8mb4'
+        },
         createdAt: new Date().toISOString()
       };
 
@@ -276,6 +238,7 @@ export default function SignUpPage() {
         localStorage.setItem('isAuthenticated', 'true');
         localStorage.setItem('userData', JSON.stringify(userData));
         localStorage.setItem('authMode', authMode);
+        localStorage.setItem('databaseConfig', JSON.stringify(databaseConfig));
         
         // Redirect to dashboard after a short delay
         setTimeout(() => {
@@ -452,65 +415,11 @@ export default function SignUpPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <Card className="border-0 shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20">
-                    <CardHeader>
-                      <CardTitle className="text-white text-lg flex items-center">
-                        <Database className="w-5 h-5 mr-2" />
-                        Database Configuration
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {/* Database Selection */}
-                      <div>
-                        <Label className="text-white mb-3 block">Select Database Type</Label>
-                        <div className="grid grid-cols-1 gap-3">
-                          {Object.entries(databaseConfigs).map(([key, config]) => (
-                            <div
-                              key={key}
-                              onClick={() => handleDatabaseSelect(key)}
-                              className={`p-3 rounded-lg border-2 cursor-pointer transition-all duration-300 ${
-                                selectedDatabase === key
-                                  ? 'border-emerald-500 bg-emerald-500/20'
-                                  : 'border-white/20 bg-white/5 hover:bg-white/10'
-                              }`}
-                            >
-                              <div className="flex items-center space-x-3">
-                                <config.icon className="w-5 h-5 text-emerald-400" />
-                                <div>
-                                  <h3 className="font-semibold text-white text-sm">{config.name}</h3>
-                                  <p className="text-xs text-gray-400">{config.description}</p>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Database Configuration Fields */}
-                      {selectedDatabase && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="space-y-3"
-                        >
-                          <Label className="text-white text-sm">Database Configuration</Label>
-                          {databaseConfigs[selectedDatabase].fields.map((field) => (
-                            <div key={field.name}>
-                              <Label htmlFor={field.name} className="text-white text-sm">{field.label}</Label>
-                              <Input
-                                id={field.name}
-                                type={field.type}
-                                placeholder={field.placeholder}
-                                defaultValue={field.defaultValue}
-                                onChange={(e) => handleInputChange(`db_${field.name}`, e.target.value)}
-                                className="bg-white/10 border-white/20 text-white placeholder-gray-400 h-10 text-sm"
-                              />
-                            </div>
-                          ))}
-                        </motion.div>
-                      )}
-                    </CardContent>
-                  </Card>
+                  <DatabaseConfigComponent
+                    onConfigChange={handleDatabaseConfigChange}
+                    onTestConnection={handleTestConnection}
+                    initialConfig={databaseConfig}
+                  />
                 </motion.div>
               )}
             </motion.div>

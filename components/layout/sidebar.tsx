@@ -11,6 +11,7 @@ import {
   FileText,
   MessagesSquare,
   Settings,
+  Database,
   ChevronLeft,
   ChevronRight,
   Menu,
@@ -77,6 +78,11 @@ export default function Sidebar({ mobile = false, open = false, onOpenChange }: 
       href: "/settings",
       icon: <Settings size={20} />,
       label: "Settings",
+    },
+    {
+      href: "/settings/database",
+      icon: <Database size={20} />,
+      label: "Database",
     },
   ];
 

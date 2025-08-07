@@ -28,6 +28,7 @@ import {
 import { CalendarIcon, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { DateRange } from "react-day-picker";
 import { useCurrency } from "@/lib/context/currency-context";
 
 interface SalesListProps {
@@ -38,10 +39,7 @@ export function SalesList({ initialSales }: SalesListProps) {
   const [sales, setSales] = useState<Sale[]>(initialSales || []);
   const [loading, setLoading] = useState(!initialSales);
   const [searchTerm, setSearchTerm] = useState("");
-  const [dateRange, setDateRange] = useState<{
-    from?: Date;
-    to?: Date;
-  }>({});
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: undefined, to: undefined });
   const [viewingSale, setViewingSale] = useState<Sale | null>(null);
   const [deletingSale, setDeletingSale] = useState<Sale | null>(null);
   const { currency } = useCurrency();
@@ -85,7 +83,7 @@ export function SalesList({ initialSales }: SalesListProps) {
 
       // Date range filter
       let matchesDateRange = true;
-      if (dateRange.from || dateRange.to) {
+      if (dateRange && (dateRange.from || dateRange.to)) {
         const saleDate = new Date(sale.date);
         
         if (dateRange.from && dateRange.to) {

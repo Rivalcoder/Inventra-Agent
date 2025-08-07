@@ -67,11 +67,37 @@ export default function QueryPage() {
     setIsLoading(true);
     
     try {
+      // Get database configuration from localStorage
+      const databaseConfig = localStorage.getItem('databaseConfig');
+      if (!databaseConfig) {
+        toast({
+          title: "Database Configuration Required",
+          description: "Please configure your database first.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // Add database configuration to headers
+      try {
+        const dbConfig = JSON.parse(databaseConfig);
+        headers['x-user-db-config'] = JSON.stringify(dbConfig);
+      } catch (error) {
+        toast({
+          title: "Invalid Database Configuration",
+          description: "Please reconfigure your database.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const response = await fetch('/api/ai', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ query }),
       });
 
@@ -126,7 +152,6 @@ export default function QueryPage() {
             toast({
               title: "Database Updated",
               description: `Query executed successfully.`,
-              variant: "success",
             });
           } catch (err: any) {
             const errMsg = "Database error: " + (err.message || "Failed to execute SQL query.");

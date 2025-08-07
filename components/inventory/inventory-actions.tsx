@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AddProductDialog } from "@/components/inventory/add-product-dialog";
@@ -9,7 +9,7 @@ import { Product } from "@/lib/types";
 
 export function InventoryActions() {
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const fileInputRef = useState<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExport = () => {
     // In a real application, this would export the inventory data

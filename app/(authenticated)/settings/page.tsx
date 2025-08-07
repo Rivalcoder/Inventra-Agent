@@ -93,82 +93,7 @@ const FolderInput = ({ onFolderSelect }: { onFolderSelect: (path: string) => voi
   );
 };
 
-// Helper function to handle folder selection and backup
-const handleFolderSelectionAndBackup = async (folderName: string) => {
-  try {
-    // Save the backup location setting
-    await createSetting({
-      setting_key: 'backup_location',
-      value: folderName,
-      type: 'string',
-      description: 'Backup location path',
-      isEncrypted: false
-    });
 
-    // Update local state
-    setSettings(prev => ({ ...prev, backupLocation: folderName }));
-
-    // Create initial backup
-    setIsBackingUp(true);
-    try {
-      // Fetch data from API
-      const response = await fetch(`${getApiBase()}/api/db?action=export-database`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch data');
-      }
-      const data = await response.json();
-
-      // Create a new zip file
-      const zip = new JSZip();
-
-      // Convert products to CSV
-      const productsCsv = convertToCSV(data.products, [
-        'id', 'name', 'description', 'category', 'price', 'stock', 'minStock', 'supplier', 'createdAt', 'updatedAt'
-      ]);
-      zip.file('inventory.csv', productsCsv);
-
-      // Convert sales to CSV
-      const salesCsv = convertToCSV(data.sales, [
-        'id', 'productId', 'productName', 'quantity', 'price', 'total', 'date', 'customer'
-      ]);
-      zip.file('sales.csv', salesCsv);
-
-      // Generate zip file
-      const content = await zip.generateAsync({ type: 'blob' });
-      const timestamp = new Date().toISOString().split('T')[0];
-      const zipFileName = `database-backup-${timestamp}.zip`;
-
-      // Save the zip file
-      const formData = new FormData();
-      formData.append('backup', content, zipFileName);
-      formData.append('location', folderName);
-
-      const saveResponse = await fetch(`${getApiBase()}/api/db?action=save-backup`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!saveResponse.ok) {
-        const errorData = await saveResponse.json();
-        throw new Error(errorData.error || 'Failed to save backup');
-      }
-
-      // Update last backup time
-      setLastBackupTime(new Date().toISOString());
-      toast.success("Backup created successfully");
-    } catch (error: any) {
-      console.error('Error creating backup:', error);
-      toast.error(error instanceof Error ? error.message : "Failed to create backup");
-    } finally {
-      setIsBackingUp(false);
-    }
-    
-    toast.success("Backup location updated successfully");
-  } catch (error: any) {
-    console.error('Error saving backup location:', error);
-    toast.error("Failed to save backup location");
-  }
-};
 
 // Helper function to convert data to CSV
 const convertToCSV = (data: any[], headers: string[]) => {
@@ -547,7 +472,79 @@ export default function SettingsPage() {
           setSelectedPath(folderName);
           
           // Handle the backup
-          await handleFolderSelectionAndBackup(folderName);
+          try {
+            // Save the backup location setting
+            await createSetting({
+              setting_key: 'backup_location',
+              value: folderName,
+              type: 'string',
+              description: 'Backup location path',
+              isEncrypted: false
+            });
+
+            // Update local state
+            setSettings(prev => ({ ...prev, backupLocation: folderName }));
+
+            // Create initial backup
+            setIsBackingUp(true);
+            try {
+              // Fetch data from API
+              const response = await fetch(`${getApiBase()}/api/db?action=export-database`);
+              if (!response.ok) {
+                throw new Error('Failed to fetch data');
+              }
+              const data = await response.json();
+
+              // Create a new zip file
+              const zip = new JSZip();
+
+              // Convert products to CSV
+              const productsCsv = convertToCSV(data.products, [
+                'id', 'name', 'description', 'category', 'price', 'stock', 'minStock', 'supplier', 'createdAt', 'updatedAt'
+              ]);
+              zip.file('inventory.csv', productsCsv);
+
+              // Convert sales to CSV
+              const salesCsv = convertToCSV(data.sales, [
+                'id', 'productId', 'productName', 'quantity', 'price', 'total', 'date', 'customer'
+              ]);
+              zip.file('sales.csv', salesCsv);
+
+              // Generate zip file
+              const content = await zip.generateAsync({ type: 'blob' });
+              const timestamp = new Date().toISOString().split('T')[0];
+              const zipFileName = `database-backup-${timestamp}.zip`;
+
+              // Save the zip file
+              const formData = new FormData();
+              formData.append('backup', content, zipFileName);
+              formData.append('location', folderName);
+
+              const saveResponse = await fetch(`${getApiBase()}/api/db?action=save-backup`, {
+                method: 'POST',
+                body: formData,
+              });
+
+              if (!saveResponse.ok) {
+                const errorData = await saveResponse.json();
+                throw new Error(errorData.error || 'Failed to save backup');
+              }
+
+              // Update last backup time
+              setLastBackupTime(new Date().toISOString());
+              toast.success("Backup created successfully");
+            } catch (error: any) {
+              console.error('Error creating backup:', error);
+              toast.error(error instanceof Error ? error.message : "Failed to create backup");
+            } finally {
+              setIsBackingUp(false);
+            }
+            
+            toast.success("Backup location updated successfully");
+          } catch (error: any) {
+            console.error('Error saving backup location:', error);
+            toast.error("Failed to save backup location");
+          }
         } else {
           toast.error("No folder selected");
         }

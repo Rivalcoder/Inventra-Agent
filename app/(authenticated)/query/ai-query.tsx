@@ -31,11 +31,29 @@ export default function AIQueryPage() {
 
     setLoading(true);
     try {
+      // Get database configuration from localStorage
+      const databaseConfig = localStorage.getItem('databaseConfig');
+      if (!databaseConfig) {
+        toast.error('Database configuration not found. Please configure your database first.');
+        return;
+      }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // Add database configuration to headers
+      try {
+        const dbConfig = JSON.parse(databaseConfig);
+        headers['x-user-db-config'] = JSON.stringify(dbConfig);
+      } catch (error) {
+        toast.error('Invalid database configuration. Please reconfigure your database.');
+        return;
+      }
+
       const response = await fetch('/api/ai', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ query }),
       });
 

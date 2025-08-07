@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DateRangePicker } from "@/components/sales/date-range-picker";
+import { DateRange } from "react-day-picker";
 import { FileText, Download, PieChart, TrendingUp, ShoppingCart, X } from "lucide-react";
 import { SalesReportTable } from "@/components/reports/sales-report-table";
 import { InventoryReportTable } from "@/components/reports/inventory-report-table";
@@ -16,10 +17,7 @@ import { getSales, getProducts } from "@/lib/data";
 import { Sale, Product } from "@/lib/types";
 
 export default function ReportsPage() {
-  const [dateRange, setDateRange] = useState<{
-    from?: Date;
-    to?: Date;
-  }>({});
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   
   const [reportFormat, setReportFormat] = useState<string>("pdf");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -60,7 +58,7 @@ export default function ReportsPage() {
 
   // Apply date filters when date range changes
   useEffect(() => {
-    if (dateRange.from && dateRange.to) {
+    if (dateRange && dateRange.from && dateRange.to) {
       const filteredSalesData = sales.filter(sale => {
         const saleDate = new Date(sale.date);
         return saleDate >= dateRange.from! && saleDate <= dateRange.to!;
@@ -72,13 +70,13 @@ export default function ReportsPage() {
   }, [dateRange, sales]);
 
   const handleClearFilters = () => {
-    setDateRange({});
+    setDateRange(undefined);
     setFilteredSales(sales);
     setFilteredProducts(products);
   };
 
   const handleGenerateReport = async () => {
-    if (!dateRange.from || !dateRange.to) {
+    if (!dateRange?.from || !dateRange?.to) {
       toast.error("Please select a date range first");
       return;
     }
@@ -203,10 +201,10 @@ export default function ReportsPage() {
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="flex items-center gap-2">
                 <DateRangePicker 
-                  dateRange={dateRange}
+                  dateRange={dateRange || { from: undefined, to: undefined }}
                   onDateRangeChange={setDateRange}
                 />
-                {(dateRange.from || dateRange.to) && (
+                {(dateRange && (dateRange.from || dateRange.to)) && (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -231,7 +229,7 @@ export default function ReportsPage() {
               </Select>
               <Button 
                 onClick={handleGenerateReport}
-                disabled={isGenerating || !dateRange.from || !dateRange.to}
+                disabled={isGenerating || !dateRange?.from || !dateRange?.to}
               >
                 {isGenerating ? (
                   <>Generating...</>

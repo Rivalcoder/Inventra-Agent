@@ -28,6 +28,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { airtableService } from '@/lib/services/airtable';
 import { configService } from '@/lib/services/config';
+import { DatabaseConfig } from '@/lib/types/database';
 
 // Local authentication service
 class LocalAuthService {
@@ -191,12 +192,36 @@ export default function SignInPage() {
       }
 
       if (userData) {
+        // Load database configuration from user data or localStorage
+        let databaseConfig: DatabaseConfig | null = null;
+        
+        if (userData.databaseConfig) {
+          databaseConfig = userData.databaseConfig;
+        } else {
+          // Try to load from localStorage (for existing users)
+          const storedConfig = localStorage.getItem('databaseConfig');
+          if (storedConfig) {
+            databaseConfig = JSON.parse(storedConfig);
+          }
+        }
+
+        // Set the database configuration if available
+        if (databaseConfig) {
+          // Store in localStorage for client-side access
+          localStorage.setItem('databaseConfig', JSON.stringify(databaseConfig));
+        }
+
         setSuccess('Sign in successful! Redirecting to dashboard...');
         
         // Store authentication state with mode information
         localStorage.setItem('isAuthenticated', 'true');
         localStorage.setItem('userData', JSON.stringify(userData));
         localStorage.setItem('authMode', authMode);
+        
+        // Store database configuration
+        if (databaseConfig) {
+          localStorage.setItem('databaseConfig', JSON.stringify(databaseConfig));
+        }
         
         // For demo mode, also set demo flag
         if (formData.email.includes('demo')) {

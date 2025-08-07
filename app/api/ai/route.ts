@@ -18,6 +18,71 @@ function formatDateForMySQL(date: Date): string {
   return date.toISOString().slice(0, 19).replace('T', ' ');
 }
 
+// Helper function to fetch data with database configuration
+async function fetchDataWithConfig(dbConfig: any) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-user-db-config': JSON.stringify(dbConfig)
+  };
+
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
+  
+  // Function to fetch with retry
+  const fetchWithRetry = async (url: string, retries = 3): Promise<any> => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await fetch(url, { headers });
+        if (response.ok) {
+          return await response.json();
+        }
+        console.warn(`Request failed (attempt ${i + 1}/${retries}): ${url}`);
+      } catch (error) {
+        console.warn(`Request error (attempt ${i + 1}/${retries}): ${url}`, error);
+      }
+      
+      // Wait before retry (exponential backoff)
+      if (i < retries - 1) {
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 100));
+      }
+    }
+    throw new Error(`Failed to fetch data from ${url} after ${retries} attempts`);
+  };
+
+  try {
+    // Fetch all data with individual error handling
+    const [products, sales, stats, topProducts, lowStock] = await Promise.allSettled([
+      fetchWithRetry(`${baseUrl}/api/db?action=products`),
+      fetchWithRetry(`${baseUrl}/api/db?action=sales`),
+      fetchWithRetry(`${baseUrl}/api/db?action=stats`),
+      fetchWithRetry(`${baseUrl}/api/db?action=top-products`),
+      fetchWithRetry(`${baseUrl}/api/db?action=low-stock`)
+    ]);
+
+    // Check if any requests failed
+    const failedRequests = [products, sales, stats, topProducts, lowStock].filter(
+      result => result.status === 'rejected'
+    );
+
+    if (failedRequests.length > 0) {
+      console.error('Some requests failed:', failedRequests.map(r => r.status === 'rejected' ? r.reason : 'success'));
+    }
+
+    // Extract data, using empty arrays/objects for failed requests
+    const result = {
+      products: products.status === 'fulfilled' ? products.value : [],
+      sales: sales.status === 'fulfilled' ? sales.value : [],
+      stats: stats.status === 'fulfilled' ? stats.value : { totalSales: 0, totalQuantity: 0, totalRevenue: 0, totalProducts: 0, totalStock: 0, totalValue: 0 },
+      topProducts: topProducts.status === 'fulfilled' ? topProducts.value : [],
+      lowStock: lowStock.status === 'fulfilled' ? lowStock.value : []
+    };
+
+    return result;
+  } catch (error) {
+    console.error('Error fetching data:', error);
+    throw new Error('Failed to fetch data from database');
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const { query } = await req.json();
@@ -32,14 +97,33 @@ export async function POST(req: Request) {
       );
     }
 
-    // Fetch all relevant data
-    const [products, sales, stats, topProducts, lowStock] = await Promise.all([
-      getProducts(),
-      getSales(),
-      getDashboardStats(),
-      getTopProducts(),
-      getLowStockProducts()
-    ]);
+    // Get database configuration from request headers
+    const dbConfigHeader = req.headers.get('x-user-db-config');
+    if (!dbConfigHeader) {
+      return NextResponse.json(
+        { 
+          error: 'Database configuration required',
+          details: 'No database configuration provided in request headers'
+        },
+        { status: 400 }
+      );
+    }
+
+    let dbConfig;
+    try {
+      dbConfig = JSON.parse(dbConfigHeader);
+    } catch (error) {
+      return NextResponse.json(
+        { 
+          error: 'Invalid database configuration',
+          details: 'Failed to parse database configuration'
+        },
+        { status: 400 }
+      );
+    }
+
+    // Fetch all relevant data with database configuration
+    const { products, sales, stats, topProducts, lowStock } = await fetchDataWithConfig(dbConfig);
 
     // Prepare the context with current data and current datetime
     const now = new Date();
@@ -69,7 +153,6 @@ export async function POST(req: Request) {
       console.log('Attempting to generate AI response...');
       const { object } = await generateObject({
         model: google('gemini-2.0-flash-exp'),
-        apiKey: apiKey,
         schema: z.object({
           Topic: z.object({
             Heading: z.string(),
