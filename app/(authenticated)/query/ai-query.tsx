@@ -14,6 +14,7 @@ const responseSchema = z.object({
     name: z.string().min(5).max(30),
     Topics: z.array(z.string()).min(10),
     Steps: z.array(z.string().min(100)).min(10),
+    SqlQuery: z.array(z.string()).optional(), // <-- Add this line
   }),
 });
 

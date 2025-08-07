@@ -68,7 +68,7 @@ export async function POST(req: Request) {
     try {
       console.log('Attempting to generate AI response...');
       const { object } = await generateObject({
-        model: google('gemini-2.5-flash-lite'),
+        model: google('gemini-2.0-flash-exp'),
         apiKey: apiKey,
         schema: z.object({
           Topic: z.object({
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
                 - When generating multiple SQL queries, ensure that if any query fails, the subsequent queries should NOT be executed (simulate transactional behavior). If a failure is likely (e.g., not enough stock), explain the reason in the Description and do NOT generate the SQL queries.
                 - Always validate that the first query (such as inserting a sale) will succeed based on the current data (e.g., check if there is enough stock). If not, explain the issue in the Description and do not provide the SQL.
                 - If a failure occurs, provide a clear error message and do not partially update the database.
-                
+                - Give Query Accordingly To The Db Structure And Also Give The Query In The SqlQuery Field Area (Refer Below For The Db Structure and Given Db Datas)
                 - Do NOT include the 'id' field in the INSERT statement for the 'sales' table. The database will generate it automatically. For example:
                   INSERT INTO sales (productId, productName, quantity, price, total, date, customer) VALUES ('1', 'Laptop Pro', 2, 100000, 200000, '${context.now}', 'Anonymous');
                 
@@ -153,7 +153,37 @@ export async function POST(req: Request) {
                 - Format percentages without ₹ symbol
                 - Use bold for total amounts
 
+               Desc sales Table
+                +-------------+---------------+------+-----+---------+-------------------+
+                | Field       | Type          | Null | Key | Default | Extra             |
+                +-------------+---------------+------+-----+---------+-------------------+
+                | id          | char(36)      | NO   | PRI | uuid()  | DEFAULT_GENERATED |
+                | productId   | varchar(36)   | NO   | MUL | NULL    |                   |
+                | productName | varchar(255)  | NO   |     | NULL    |                   |
+                | quantity    | int           | NO   |     | NULL    |                   |
+                | price       | decimal(10,2) | NO   |     | NULL    |                   |
+                | total       | decimal(10,2) | NO   |     | NULL    |                   |
+                | date        | datetime      | NO   |     | NULL    |                   |
+                | customer    | varchar(255)  | YES  |     | NULL    |                   |
+                +-------------+---------------+------+-----+---------+-------------------+
 
+                Desc Products Table :
+                +-------------+---------------+------+-----+---------+-------+
+                | Field       | Type          | Null | Key | Default | Extra |
+                +-------------+---------------+------+-----+---------+-------+
+                | id          | varchar(36)   | NO   | PRI | NULL    |       |
+                | name        | varchar(255)  | NO   | UNI | NULL    |       |
+                | description | text          | YES  |     | NULL    |       |
+                | category    | varchar(100)  | YES  |     | NULL    |       |
+                | price       | decimal(10,2) | NO   |     | NULL    |       |
+                | stock       | int           | NO   |     | NULL    |       |
+                | minStock    | int           | NO   |     | NULL    |       |
+                | supplier    | varchar(255)  | YES  |     | NULL    |       |
+                | createdAt   | datetime      | NO   |     | NULL    |       |
+                | updatedAt   | datetime      | NO   |     | NULL    |       |
+                +-------------+---------------+------+-----+---------+-------+
+
+                
                 Response Format Examples:
 
                 1. For Product Listings:

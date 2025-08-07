@@ -27,6 +27,9 @@ async function fetchFromApi(endpoint: string, params: Record<string, string> = {
 export async function postToApi(endpoint: string, data: any) {
   try {
     const searchParams = new URLSearchParams({ action: endpoint });
+    if (endpoint === 'run-sql') {
+      console.log('[runSqlQuery] Sending SQL:', data.sql);
+    }
     const response = await fetch(`${getApiBase()}/api/db?${searchParams}`, {
       method: 'POST',
       headers: {
@@ -35,9 +38,15 @@ export async function postToApi(endpoint: string, data: any) {
       body: JSON.stringify(data),
     });
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[postToApi] API error: ${response.status} ${response.statusText}. Response:`, errorText);
       throw new Error(`API error: ${response.statusText}`);
     }
-    return response.json();
+    const json = await response.json();
+    if (endpoint === 'run-sql') {
+      console.log('[runSqlQuery] Response:', json);
+    }
+    return json;
   } catch (error) {
     console.error('Error posting data:', error);
     throw error;
@@ -189,5 +198,6 @@ export async function deleteSetting(key: string): Promise<{ success: boolean }> 
 
 // Run a raw SQL query (for AI-generated queries)
 export async function runSqlQuery(sql: string) {
+  console.log('[runSqlQuery] Executing:', sql);
   return postToApi('run-sql', { sql });
 }
