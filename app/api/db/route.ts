@@ -560,10 +560,19 @@ export async function GET(request: Request) {
           return NextResponse.json(lowStockProducts);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const lowStockProducts = await db.collection('products')
-            .find({ $expr: { $lte: ['$stock', '$minStock'] } })
-            .sort({ $expr: { $divide: ['$stock', '$minStock'] } })
-            .toArray();
+          const lowStockProducts = await db.collection('products').aggregate([
+            {
+              $match: { $expr: { $lte: ['$stock', '$minStock'] } }
+            },
+            {
+              $addFields: {
+                stockRatio: { $divide: ['$stock', '$minStock'] }
+              }
+            },
+            {
+              $sort: { stockRatio: 1 }
+            }
+          ]).toArray();
           console.log(`Found ${lowStockProducts.length} low stock products`);
           return NextResponse.json(lowStockProducts);
         } else if (config.type === 'postgresql') {
@@ -1164,6 +1173,30 @@ export async function POST(request: Request) {
           }, { status: 500 });
         }
 
+      case 'update-product': {
+        const body = await request.json();
+        const { id, ...updateFields } = body;
+
+        if (!id) {
+          return NextResponse.json({ error: 'Product ID is required' }, { status: 400 });
+        }
+
+        if (config.type === 'mysql') {
+          const pool = connection.connection as mysql.Pool;
+          const [result] = await pool.query('UPDATE products SET ? WHERE id = ?', [updateFields, id]);
+          return NextResponse.json({ success: true, result });
+        } else if (config.type === 'mongodb') {
+          const db = connection.connection;
+          const result = await db.collection('products').updateOne(
+            { id },
+            { $set: updateFields }
+          );
+          return NextResponse.json({ success: true, result });
+        } else if (config.type === 'postgresql') {
+          return NextResponse.json({ error: 'PostgreSQL update not implemented' }, { status: 400 });
+        }
+        break;
+      }
       default:
         return NextResponse.json({ 
           error: 'Invalid action',
