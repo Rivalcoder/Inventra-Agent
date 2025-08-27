@@ -48,21 +48,22 @@ html, body {
     --card-foreground: 220 13% 18%;
     --popover: 0 0% 100%;
     --popover-foreground: 220 13% 18%;
-    --primary: 245 100% 60%;
+    /* Switched primary/ring/accent to emerald/teal family */
+    --primary: 160 84% 39%;
     --primary-foreground: 0 0% 100%;
     --secondary: 220 20% 96%;
     --secondary-foreground: 220 13% 18%;
     --muted: 220 20% 92%;
     --muted-foreground: 220 13% 50%;
-    --accent: 245 100% 90%;
-    --accent-foreground: 245 100% 40%;
+    --accent: 162 66% 85%;
+    --accent-foreground: 161 94% 30%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
     --border: 220 20% 90%;
     --input: 220 20% 90%;
-    --ring: 245 100% 60%;
-    --chart-1: 245 100% 60%; /* Blue */
-    --chart-2: 160 80% 50%;  /* Green */
+    --ring: 160 84% 39%;
+    --chart-1: 160 84% 39%; /* Emerald */
+    --chart-2: 191 97% 77%;  /* Sky */
     --chart-3: 45 100% 60%;  /* Yellow */
     --chart-4: 12 90% 65%;   /* Orange */
     --chart-5: 340 80% 65%;  /* Pink */
@@ -76,21 +77,21 @@ html, body {
     --card-foreground: 220 13% 98%;
     --popover: 220 13% 16%;
     --popover-foreground: 220 13% 98%;
-    --primary: 245 100% 60%;
+    --primary: 160 84% 39%;
     --primary-foreground: 0 0% 100%;
     --secondary: 220 13% 18%;
     --secondary-foreground: 220 13% 98%;
     --muted: 220 13% 20%;
     --muted-foreground: 220 13% 60%;
-    --accent: 245 100% 30%;
-    --accent-foreground: 245 100% 90%;
+    --accent: 162 66% 30%;
+    --accent-foreground: 162 66% 85%;
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
     --border: 220 13% 20%;
     --input: 220 13% 20%;
-    --ring: 245 100% 60%;
-    --chart-1: 245 100% 70%; /* Blue */
-    --chart-2: 160 80% 60%;  /* Green */
+    --ring: 160 84% 39%;
+    --chart-1: 160 84% 45%; /* Emerald */
+    --chart-2: 191 97% 70%;  /* Sky */
     --chart-3: 45 100% 70%;  /* Yellow */
     --chart-4: 12 90% 75%;   /* Orange */
     --chart-5: 340 80% 75%;  /* Pink */

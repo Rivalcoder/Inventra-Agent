@@ -24,6 +24,16 @@ async function fetchFromApi(endpoint: string, params: Record<string, string> = {
   }
 }
 
+// Client-side helper to detect if a DB config exists
+function hasClientDbConfig(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return !!(localStorage.getItem('databaseConfig') || localStorage.getItem('default_db_config'));
+  } catch {
+    return false;
+  }
+}
+
 // Helper function to post data to API
 export async function postToApi(endpoint: string, data: any) {
   try {
@@ -135,6 +145,10 @@ export async function getLowStockProducts(): Promise<Product[]> {
 // Settings operations
 export async function getSettings(): Promise<Settings[]> {
   try {
+    // Skip API call if no DB config yet (e.g., right after sign-in)
+    if (!hasClientDbConfig()) {
+      return [];
+    }
     const response = await fetchFromApi('settings', { action: 'settings' });
     console.log('getSettings response:', response);
     return response;
@@ -146,6 +160,10 @@ export async function getSettings(): Promise<Settings[]> {
 
 export async function getSetting(key: string): Promise<Settings | null> {
   try {
+    // Skip API call if no DB config yet
+    if (!hasClientDbConfig()) {
+      return null;
+    }
     const response = await fetchFromApi('setting', { action: 'setting', key });
     console.log('getSetting response:', response);
     return response;

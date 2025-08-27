@@ -379,13 +379,31 @@ async function insertDummyData(config: DatabaseConfig) {
 export async function GET(request: Request) {
   try {
     console.log('GET request received');
-    await ensureInitialized(request);
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
     console.log('Action:', action);
 
+    // For lightweight actions, return safe defaults without touching DB
+    if (action === 'settings') {
+      return NextResponse.json([]);
+    }
+    if (action === 'setting') {
+      return NextResponse.json(null);
+    }
+
+    // For other actions, proceed with initialization
+    const isLightweight = false;
+    if (!isLightweight) {
+      await ensureInitialized(request);
+    }
+
     const config = await getDatabaseConfig(request);
-    const connection = await dbService.connect(config);
+    let connection: any;
+    try {
+      connection = await dbService.connect(config);
+    } catch (connError) {
+      throw connError;
+    }
 
     switch (action) {
       case 'stats':

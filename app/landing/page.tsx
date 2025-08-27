@@ -9,23 +9,15 @@ import {
   BarChart3, 
   Zap, 
   ArrowRight,
-  Shield,
-  Users,
-  Clock,
   Github,
   Globe,
-  Database,
   Cpu,
   Smartphone,
   Cloud,
   Lock,
   Sparkles,
-  Target,
   Rocket,
-  Star,
-  CheckCircle,
   Play,
-  Code,
   Download,
   Brain,
   ShieldCheck,
@@ -33,7 +25,7 @@ import {
   Target as Aim
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import DemoVideo from '@/components/landing/demo-video';
 
 export default function LandingPage() {
@@ -42,6 +34,7 @@ export default function LandingPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showDemo, setShowDemo] = useState(false);
   const [particles, setParticles] = useState<Array<{id: number, left: number, top: number}>>([]);
+  const [quickQuery, setQuickQuery] = useState('');
   const router = useRouter();
 
   const features = [
@@ -96,6 +89,13 @@ export default function LandingPage() {
       icon: Lock,
       color: "from-red-500 to-orange-500"
     }
+  ];
+
+  const exampleQueries = [
+    'What are my top 5 selling products this week?',
+    'Which items are low on stock today?',
+    'Show revenue by month for this year',
+    'Predict next month sales for product A',
   ];
 
   const infoCards = [
@@ -154,6 +154,12 @@ export default function LandingPage() {
   const handleDemo = () => {
     // Redirect to signin page with demo mode
     router.push('/auth/signin?demo=true');
+  };
+
+  const handleQuickAsk = () => {
+    const q = quickQuery.trim();
+    const query = q || exampleQueries[0];
+    router.push(`/query?ask=${encodeURIComponent(query)}`);
   };
 
   return (
@@ -309,12 +315,12 @@ export default function LandingPage() {
               </motion.div>
             </motion.div>
 
-            {/* Features Grid */}
+            {/* Features Ribbons - No cards */}
             <motion.div
               initial={{ opacity: 0, y: 50 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 1, delay: 0.8 }}
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-20"
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8 mb-24"
             >
               {features.map((feature, index) => (
                 <motion.div
@@ -322,91 +328,196 @@ export default function LandingPage() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.6, delay: 1 + index * 0.1 }}
-                  whileHover={{ scale: 1.05, y: -5 }}
-                  className="group"
+                  whileHover={{ y: -4 }}
+                  className="group relative"
                 >
-                  <Card className="h-full border-0 shadow-2xl bg-white/10 backdrop-blur-xl hover:bg-white/20 transition-all duration-300 border border-white/20">
-                    <CardContent className="p-6 text-center">
-                      <div className={`w-16 h-16 bg-gradient-to-r ${feature.color} rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
+                  <div className="relative overflow-visible">
+                    <div className="absolute left-6 top-0 bottom-0 w-1 bg-gradient-to-b from-white/30 to-white/0 rounded-full opacity-60" />
+                    <div className="relative pl-24 pr-8 py-6 rounded-2xl">
+                      <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-16 h-16 bg-gradient-to-r ${feature.color} rounded-full flex items-center justify-center shadow-xl ring-4 ring-white/10 group-hover:scale-105 transition-transform`}>
                         <feature.icon className="w-8 h-8 text-white" />
                       </div>
-                      <h3 className="text-lg font-semibold mb-2 text-white">
+                      <h3 className="text-xl font-semibold mb-1 text-white tracking-tight">
                         {feature.title}
                       </h3>
                       <p className="text-gray-300 text-sm leading-relaxed">
                         {feature.description}
                       </p>
-                    </CardContent>
-                  </Card>
+                      <div className={`mt-4 h-[3px] w-24 bg-gradient-to-r ${feature.color} rounded-full opacity-70 group-hover:w-32 transition-all`} />
+                    </div>
+                  </div>
                 </motion.div>
               ))}
             </motion.div>
 
-            {/* Showcases Section */}
+            {/* Animated Separator */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true, amount: 0.4 }}
+              transition={{ duration: 0.8 }}
+              className="relative mb-16"
+            >
+              <div className="h-px w-full bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+              <motion.div
+                initial={{ x: '-10%' }}
+                animate={{ x: '110%' }}
+                transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+                className="absolute -top-1 left-0 w-24 h-2 bg-gradient-to-r from-emerald-400/0 via-emerald-400/70 to-emerald-400/0 rounded-full"
+              />
+            </motion.div>
+
+            
+
+            {/* Showcases Section - Icon blocks, no containers */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 1, delay: 1.2 }}
-              className="mb-20"
+              className="mb-24"
             >
               <h2 className="text-4xl font-bold text-white mb-12">Why Choose InventSmart AI?</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {showcases.map((showcase, index) => (
                   <motion.div
                     key={index}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6, delay: 1.4 + index * 0.1 }}
-                    whileHover={{ scale: 1.05 }}
+                    whileHover={{ y: -4 }}
                     className="text-center group"
                   >
-                    <div className={`w-20 h-20 bg-gradient-to-r ${showcase.color} rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
+                    <div className={`w-20 h-20 bg-gradient-to-r ${showcase.color} rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
                       <showcase.icon className="w-10 h-10 text-white" />
                     </div>
-                    <h3 className="text-xl font-semibold mb-2 text-white">
+                    <h3 className="text-xl font-semibold mb-1 text-white">
                       {showcase.title}
                     </h3>
-                    <p className="text-gray-400 text-sm">
+                    <p className="text-gray-400 text-sm max-w-xs mx-auto">
                       {showcase.description}
                     </p>
+                    <div className="mt-4 h-px w-16 mx-auto bg-white/10" />
                   </motion.div>
                 ))}
               </div>
             </motion.div>
 
-            {/* Info Cards Section */}
+            {/* Animated Split */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true, amount: 0.4 }}
+              transition={{ duration: 0.8 }}
+              className="relative mb-16"
+            >
+              <svg className="w-full h-8" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
+                <defs>
+                  <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="rgba(255,255,255,0)" />
+                    <stop offset="50%" stopColor="rgba(255,255,255,0.35)" />
+                    <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+                  </linearGradient>
+                </defs>
+                <path d="M0,4 C20,2 40,6 60,4 C80,2 90,5 100,4" stroke="url(#grad)" strokeWidth="1" fill="none" />
+              </svg>
+              <motion.div
+                initial={{ x: '10%' }}
+                animate={{ x: ['10%', '90%', '10%'] }}
+                transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+                className="absolute -top-1 left-0 w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_12px_rgba(16,185,129,0.8)]"
+              />
+            </motion.div>
+
+            {/* Advanced Features - Zigzag timeline, no cards */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 1, delay: 1.6 }}
-              className="mb-20"
+              className="mb-28"
             >
               <h2 className="text-4xl font-bold text-white mb-12">Advanced Features</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {infoCards.map((card, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, delay: 1.8 + index * 0.1 }}
-                    whileHover={{ scale: 1.05, y: -5 }}
-                    className="group"
-                  >
-                    <Card className="h-full border-0 shadow-2xl bg-white/10 backdrop-blur-xl hover:bg-white/20 transition-all duration-300 border border-white/20">
-                      <CardContent className="p-6 text-center">
-                        <div className={`w-16 h-16 bg-gradient-to-r ${card.color} rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
-                          <card.icon className="w-8 h-8 text-white" />
+              <div className="relative max-w-5xl mx-auto">
+                <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white/10 -translate-x-1/2" />
+                <div className="space-y-10">
+                  {infoCards.map((card, index) => {
+                    const isLeft = index % 2 === 0;
+                    return (
+                      <motion.div
+                        key={index}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.6, delay: 1.8 + index * 0.1 }}
+                        className={`relative flex ${isLeft ? 'justify-start' : 'justify-end'}`}
+                      >
+                        <div className={`w-full md:w-1/2 ${isLeft ? 'pr-8' : 'pl-8'}`}>
+                          <div className={`flex items-start gap-4 ${isLeft ? 'flex-row' : 'flex-row-reverse'}`}>
+                            <div className={`w-14 h-14 rounded-xl bg-gradient-to-r ${card.color} flex items-center justify-center shadow-lg ring-4 ring-white/10`}>
+                              <card.icon className="w-7 h-7 text-white" />
+                            </div>
+                            <div className={`${isLeft ? 'text-left' : 'text-right'}`}>
+                              <h3 className="text-lg font-semibold text-white mb-1">{card.title}</h3>
+                              <p className="text-gray-300 text-sm leading-relaxed">{card.description}</p>
+                            </div>
+                          </div>
                         </div>
-                        <h3 className="text-lg font-semibold mb-2 text-white">
-                          {card.title}
-                        </h3>
-                        <p className="text-gray-300 text-sm leading-relaxed">
-                          {card.description}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
+                        <div className="absolute left-1/2 top-3 -translate-x-1/2 w-3 h-3 bg-emerald-400 rounded-full shadow-[0_0_0_4px_rgba(16,185,129,0.2)]" />
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Quick AI Query - Useful interactive section (moved above CTA) */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.6 }}
+              className="mb-16"
+            >
+              <div className="text-center mb-6">
+                <span className="text-sm uppercase tracking-widest text-gray-400">Ask a quick question</span>
+                <h3 className="mt-2 text-2xl md:text-3xl font-semibold text-white">Get instant insights with AI</h3>
+              </div>
+              <div className="max-w-3xl mx-auto flex flex-col sm:flex-row gap-3 items-stretch">
+                <div className="relative flex-1">
+                  <Input
+                    value={quickQuery}
+                    onChange={(e) => setQuickQuery(e.target.value)}
+                    placeholder="e.g. What are my top 5 selling products this week?"
+                    className="bg-white/5 border-white/10 text-gray-100 placeholder:text-gray-400 pr-10"
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleQuickAsk(); }}
+                  />
+                  <Sparkles className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-400" />
+                </div>
+                <Button onClick={handleQuickAsk} className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600">
+                  Ask AI
+                  <ArrowRight className="ml-2 w-4 h-4" />
+                </Button>
+              </div>
+              <div className="max-w-3xl mx-auto mt-4 flex flex-wrap gap-2 justify-center">
+                {exampleQueries.map((ex, i) => (
+                  <Button key={i} variant="outline" size="sm" className="border-white/10 text-gray-300 hover:bg-white/10"
+                    onClick={() => setQuickQuery(ex)}
+                  >
+                    {ex}
+                  </Button>
                 ))}
+              </div>
+              <div className="max-w-3xl mx-auto mt-6">
+                <div className="h-24 rounded-xl bg-white/5 border border-white/10 overflow-hidden relative">
+                  <motion.div
+                    initial={{ x: '-20%' }}
+                    animate={{ x: '120%' }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                    className="absolute top:0 left-0 h-full w-24 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+                  />
+                  <div className="p-4 space-y-2">
+                    <div className="w-2/3 h-3 bg-white/10 rounded" />
+                    <div className="w-1/2 h-3 bg-white/10 rounded" />
+                    <div className="w-5/6 h-3 bg-white/10 rounded" />
+                  </div>
+                </div>
               </div>
             </motion.div>
 

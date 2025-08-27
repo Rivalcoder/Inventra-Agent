@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { 
@@ -29,14 +29,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { airtableService } from '@/lib/services/airtable';
 import { configService } from '@/lib/services/config';
 import { DatabaseConfig } from '@/lib/types/database';
+import { Badge } from '@/components/ui/badge';
 
 // Local authentication service
 class LocalAuthService {
   private users: any[] = [];
 
   constructor() {
-    // Load users from localStorage
-    this.users = JSON.parse(localStorage.getItem('local_users') || '[]');
+    // Load users from localStorage (client only)
+    if (typeof window !== 'undefined') {
+      this.users = JSON.parse(localStorage.getItem('local_users') || '[]');
+    } else {
+      this.users = [];
+    }
     
     // Add demo users if they don't exist
     const demoUsers = [
@@ -59,8 +64,10 @@ class LocalAuthService {
       }
     });
     
-    // Save updated users list
-    localStorage.setItem('local_users', JSON.stringify(this.users));
+    // Save updated users list (client only)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('local_users', JSON.stringify(this.users));
+    }
   }
 
   async createUser(userData: any): Promise<boolean> {
@@ -79,7 +86,9 @@ class LocalAuthService {
       };
 
       this.users.push(newUser);
-      localStorage.setItem('local_users', JSON.stringify(this.users));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('local_users', JSON.stringify(this.users));
+      }
       return true;
     } catch (error) {
       console.error('Error creating local user:', error);
@@ -97,7 +106,9 @@ class LocalAuthService {
         const updatedUsers = this.users.map(u => 
           u.email === email ? user : u
         );
-        localStorage.setItem('local_users', JSON.stringify(updatedUsers));
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('local_users', JSON.stringify(updatedUsers));
+        }
         return user;
       }
 
@@ -113,21 +124,35 @@ class LocalAuthService {
   }
 }
 
-const localAuthService = new LocalAuthService();
+let localAuthService: LocalAuthService | null = null;
 
 export default function SignInPage() {
   const router = useRouter();
+  const localService = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    if (!localAuthService) localAuthService = new LocalAuthService();
+    return localAuthService;
+  }, []);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [authMode, setAuthMode] = useState<'airtable' | 'local'>(configService.getAuthMode());
   const [isDemoMode, setIsDemoMode] = useState(configService.isDemoMode());
+  const [isOnline, setIsOnline] = useState<boolean>(true);
 
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
+
+  const [createAccountData, setCreateAccountData] = useState({
+    name: '',
+    email: '',
+    password: ''
+  });
+
+  const [onlineDbType, setOnlineDbType] = useState<'mysql' | 'mongodb'>('mysql');
 
   // Handle demo mode from URL parameter
   useEffect(() => {
@@ -154,6 +179,19 @@ export default function SignInPage() {
   useEffect(() => {
     configService.setAuthMode(authMode);
   }, [authMode]);
+
+  // Online/offline detection
+  useEffect(() => {
+    setIsOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
@@ -188,7 +226,8 @@ export default function SignInPage() {
         userData = await airtableService.verifyUser(formData.email, formData.password);
       } else {
         // Use local authentication
-        userData = await localAuthService.verifyUser(formData.email, formData.password);
+        if (!localService) throw new Error('Local service unavailable on server');
+        userData = await localService.verifyUser(formData.email, formData.password);
       }
 
       if (userData) {
@@ -208,24 +247,32 @@ export default function SignInPage() {
         // Set the database configuration if available
         if (databaseConfig) {
           // Store in localStorage for client-side access
-          localStorage.setItem('databaseConfig', JSON.stringify(databaseConfig));
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('databaseConfig', JSON.stringify(databaseConfig));
+          }
         }
 
         setSuccess('Sign in successful! Redirecting to dashboard...');
         
         // Store authentication state with mode information
-        localStorage.setItem('isAuthenticated', 'true');
-        localStorage.setItem('userData', JSON.stringify(userData));
-        localStorage.setItem('authMode', authMode);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('isAuthenticated', 'true');
+          localStorage.setItem('userData', JSON.stringify(userData));
+          localStorage.setItem('authMode', authMode);
+        }
         
         // Store database configuration
         if (databaseConfig) {
-          localStorage.setItem('databaseConfig', JSON.stringify(databaseConfig));
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('databaseConfig', JSON.stringify(databaseConfig));
+          }
         }
         
         // For demo mode, also set demo flag
         if (formData.email.includes('demo')) {
-          localStorage.setItem('isDemoMode', 'true');
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('isDemoMode', 'true');
+          }
         }
         
         // Redirect to dashboard after a short delay
@@ -257,6 +304,46 @@ export default function SignInPage() {
     setTimeout(() => {
       handleSignIn();
     }, 500);
+  };
+
+  const handleCreateOfflineAccount = async () => {
+    setError('');
+    if (!createAccountData.name || !createAccountData.email || !createAccountData.password) {
+      setError('Please fill in all Create Account fields');
+      return;
+    }
+    const created = await localAuthService.createUser({
+      name: createAccountData.name,
+      email: createAccountData.email,
+      password: createAccountData.password,
+      role: 'user',
+      databaseConfig: {
+        type: 'mysql',
+        host: 'localhost',
+        port: 3306,
+        database: 'ai_inventory',
+        user: 'root'
+      } as unknown as DatabaseConfig
+    });
+    if (!created) {
+      setError('User already exists. Try signing in.');
+      return;
+    }
+    setSuccess('Account created locally. You can now sign in.');
+  };
+
+  const handleCreateOnlineAccount = async () => {
+    setError('');
+    if (!isOnline) {
+      setError('You are offline. Connect to the internet to create an online account.');
+      return;
+    }
+    if (!createAccountData.name || !createAccountData.email || !createAccountData.password) {
+      setError('Please fill in all Create Online Account fields');
+      return;
+    }
+    // Placeholder: In real app, call backend/signup for cloud provider
+    setSuccess(`Online account request submitted with ${onlineDbType.toUpperCase()} defaults.`);
   };
 
   return (
@@ -334,7 +421,7 @@ export default function SignInPage() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.3, delay: 0.1 }}
             >
-              <Card className="border-0 shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20 h-full">
+              <Card className="shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20 h-full">
                 <CardHeader>
                   <CardTitle className="text-white text-xl flex items-center">
                     <Settings className="w-6 h-6 mr-3" />
@@ -442,7 +529,7 @@ export default function SignInPage() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.3, delay: 0.2 }}
             >
-              <Card className="border-0 shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20 h-full">
+              <Card className="shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20 h-full">
                 <CardHeader>
                   <CardTitle className="text-white text-xl flex items-center">
                     <Lock className="w-6 h-6 mr-3" />
@@ -510,10 +597,29 @@ export default function SignInPage() {
                       </Button>
                     </p>
                   </div>
+
+                  {/* Database Info Panel */}
+                  <div className="mt-2 p-4 rounded-lg bg-white/5 border border-white/10">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Database className="w-5 h-5 text-emerald-400" />
+                        <span className="text-white font-medium">Database Configuration</span>
+                      </div>
+                      <Badge variant="outline" className="border-emerald-500/40 text-emerald-300">Recommended</Badge>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                      <div className="text-gray-300"><span className="text-gray-400">Type:</span> MySQL</div>
+                      <div className="text-gray-300"><span className="text-gray-400">Host:</span> localhost:3306</div>
+                      <div className="text-gray-300"><span className="text-gray-400">Database:</span> ai_inventory</div>
+                    </div>
+                    <p className="text-gray-400 text-xs mt-2">MySQL is recommended for most use cases. It's widely supported and has excellent performance.</p>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
           </div>
+
+          
         </motion.div>
       </div>
     </div>
