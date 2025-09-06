@@ -35,6 +35,24 @@ async function getDatabaseConfig(request: Request): Promise<DatabaseConfig> {
       return JSON.parse(userConfig);
     }
     
+    // For development, provide a default MySQL configuration
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Using default development database configuration');
+      return {
+        type: 'mysql',
+        host: 'localhost',
+        port: 3306,
+        username: 'root',
+        password: '',
+        database: 'ai_inventory',
+        options: {
+          ssl: false,
+          connectionLimit: 10,
+          charset: 'utf8mb4'
+        }
+      };
+    }
+    
     // If no user config provided, throw error - user must be authenticated
     throw new Error('No database configuration provided. User must be authenticated and have database configuration.');
   } catch (error) {
@@ -103,7 +121,7 @@ let initializationPromise: Promise<void> | null = null;
 async function ensureInitialized(request: Request) {
   // Check if user is authenticated by looking for database config in headers
   const userConfig = request.headers.get('x-user-db-config');
-  if (!userConfig) {
+  if (!userConfig && process.env.NODE_ENV !== 'development') {
     throw new Error('Authentication required. No database configuration provided.');
   }
 
@@ -383,13 +401,12 @@ export async function GET(request: Request) {
     const action = searchParams.get('action');
     console.log('Action:', action);
 
+    // Check for database configuration in headers
+    const userConfig = request.headers.get('x-user-db-config');
+    console.log('User config header:', userConfig ? 'Present' : 'Missing');
+
     // For lightweight actions, return safe defaults without touching DB
-    if (action === 'settings') {
-      return NextResponse.json([]);
-    }
-    if (action === 'setting') {
-      return NextResponse.json(null);
-    }
+    // Note: settings need to be retrieved from database, so we'll handle them below
 
     // For other actions, proceed with initialization
     const isLightweight = false;
@@ -1137,6 +1154,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     console.log('POST request received');
+    
+    // Check for database configuration in headers
+    const userConfig = request.headers.get('x-user-db-config');
+    console.log('User config header:', userConfig ? 'Present' : 'Missing');
+    
     await ensureInitialized(request);
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
@@ -1212,6 +1234,260 @@ export async function POST(request: Request) {
           return NextResponse.json({ success: true, result });
         } else if (config.type === 'postgresql') {
           return NextResponse.json({ error: 'PostgreSQL update not implemented' }, { status: 400 });
+        }
+        break;
+      }
+
+      case 'settings': {
+        console.log('Creating/Updating setting...');
+        const settingData = await request.json();
+        
+        if (!settingData.setting_key) {
+          return NextResponse.json({ error: 'Setting key is required' }, { status: 400 });
+        }
+
+        if (config.type === 'mysql') {
+          const pool = connection.connection as mysql.Pool;
+          
+          // Check if setting exists
+          const [existing] = await pool.query<mysql.RowDataPacket[]>(
+            'SELECT id FROM settings WHERE setting_key = ?',
+            [settingData.setting_key]
+          );
+
+          if (existing.length > 0) {
+            // Update existing setting
+            await pool.query(
+              'UPDATE settings SET value = ?, type = ?, description = ?, isEncrypted = ?, updatedAt = NOW() WHERE setting_key = ?',
+              [settingData.value, settingData.type, settingData.description, settingData.isEncrypted || false, settingData.setting_key]
+            );
+          } else {
+            // Create new setting
+            const settingId = crypto.randomUUID();
+            await pool.query(
+              'INSERT INTO settings (id, setting_key, value, type, description, isEncrypted, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())',
+              [settingId, settingData.setting_key, settingData.value, settingData.type, settingData.description, settingData.isEncrypted || false]
+            );
+          }
+
+          // Return the setting
+          const [result] = await pool.query<mysql.RowDataPacket[]>(
+            'SELECT * FROM settings WHERE setting_key = ?',
+            [settingData.setting_key]
+          );
+          
+          return NextResponse.json(result[0] || null);
+        } else if (config.type === 'mongodb') {
+          const db = connection.connection;
+          
+          const result = await db.collection('settings').findOneAndUpdate(
+            { setting_key: settingData.setting_key },
+            {
+              $set: {
+                ...settingData,
+                id: settingData.id || crypto.randomUUID(),
+                updatedAt: new Date().toISOString()
+              }
+            },
+            { upsert: true, returnDocument: 'after' }
+          );
+          
+          return NextResponse.json(result.value);
+        } else if (config.type === 'postgresql') {
+          const pool = connection.connection;
+          
+          // Check if setting exists
+          const existingResult = await pool.query(
+            'SELECT id FROM settings WHERE setting_key = $1',
+            [settingData.setting_key]
+          );
+
+          if (existingResult.rows.length > 0) {
+            // Update existing setting
+            await pool.query(
+              'UPDATE settings SET value = $1, type = $2, description = $3, is_encrypted = $4, updated_at = NOW() WHERE setting_key = $5',
+              [settingData.value, settingData.type, settingData.description, settingData.isEncrypted || false, settingData.setting_key]
+            );
+          } else {
+            // Create new setting
+            const settingId = crypto.randomUUID();
+            await pool.query(
+              'INSERT INTO settings (id, setting_key, value, type, description, is_encrypted, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())',
+              [settingId, settingData.setting_key, settingData.value, settingData.type, settingData.description, settingData.isEncrypted || false]
+            );
+          }
+
+          // Return the setting
+          const result = await pool.query(
+            'SELECT * FROM settings WHERE setting_key = $1',
+            [settingData.setting_key]
+          );
+          
+          return NextResponse.json(result.rows[0]);
+        }
+        break;
+      }
+
+      case 'update-setting': {
+        console.log('Updating setting...');
+        const settingData = await request.json();
+        
+        if (!settingData.setting_key) {
+          return NextResponse.json({ error: 'Setting key is required' }, { status: 400 });
+        }
+
+        if (config.type === 'mysql') {
+          const pool = connection.connection as mysql.Pool;
+          
+          await pool.query(
+            'UPDATE settings SET value = ?, type = ?, description = ?, isEncrypted = ?, updatedAt = NOW() WHERE setting_key = ?',
+            [settingData.value, settingData.type, settingData.description, settingData.isEncrypted || false, settingData.setting_key]
+          );
+
+          // Return the updated setting
+          const [result] = await pool.query<mysql.RowDataPacket[]>(
+            'SELECT * FROM settings WHERE setting_key = ?',
+            [settingData.setting_key]
+          );
+          
+          return NextResponse.json(result[0] || null);
+        } else if (config.type === 'mongodb') {
+          const db = connection.connection;
+          
+          const result = await db.collection('settings').findOneAndUpdate(
+            { setting_key: settingData.setting_key },
+            {
+              $set: {
+                ...settingData,
+                updatedAt: new Date().toISOString()
+              }
+            },
+            { returnDocument: 'after' }
+          );
+          
+          return NextResponse.json(result.value || null);
+        } else if (config.type === 'postgresql') {
+          const pool = connection.connection;
+          
+          await pool.query(
+            'UPDATE settings SET value = $1, type = $2, description = $3, is_encrypted = $4, updated_at = NOW() WHERE setting_key = $5',
+            [settingData.value, settingData.type, settingData.description, settingData.isEncrypted || false, settingData.setting_key]
+          );
+
+          // Return the updated setting
+          const result = await pool.query(
+            'SELECT * FROM settings WHERE setting_key = $1',
+            [settingData.setting_key]
+          );
+          
+          return NextResponse.json(result.rows[0]);
+        }
+        break;
+      }
+
+      case 'delete-setting': {
+        console.log('Deleting setting...');
+        const { setting_key } = await request.json();
+        
+        if (!setting_key) {
+          return NextResponse.json({ error: 'Setting key is required' }, { status: 400 });
+        }
+
+        if (config.type === 'mysql') {
+          const pool = connection.connection as mysql.Pool;
+          await pool.query('DELETE FROM settings WHERE setting_key = ?', [setting_key]);
+        } else if (config.type === 'mongodb') {
+          const db = connection.connection;
+          await db.collection('settings').deleteOne({ setting_key });
+        } else if (config.type === 'postgresql') {
+          const pool = connection.connection;
+          await pool.query('DELETE FROM settings WHERE setting_key = $1', [setting_key]);
+        }
+        
+        return NextResponse.json({ success: true });
+      }
+
+      case 'products': {
+        console.log('Creating product...');
+        const productData = await request.json();
+        
+        if (!productData.name) {
+          return NextResponse.json({ error: 'Product name is required' }, { status: 400 });
+        }
+
+        const productId = crypto.randomUUID();
+        const now = formatDateForMySQL(new Date());
+        
+        if (config.type === 'mysql') {
+          const pool = connection.connection as mysql.Pool;
+          await pool.query(
+            'INSERT INTO products (id, name, description, category, price, stock, minStock, supplier, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [productId, productData.name, productData.description || '', productData.category || '', productData.price || 0, productData.stock || 0, productData.minStock || 0, productData.supplier || '', now, now]
+          );
+          
+          const [result] = await pool.query<mysql.RowDataPacket[]>('SELECT * FROM products WHERE id = ?', [productId]);
+          return NextResponse.json(result[0]);
+        } else if (config.type === 'mongodb') {
+          const db = connection.connection;
+          const product = {
+            id: productId,
+            ...productData,
+            createdAt: now,
+            updatedAt: now
+          };
+          await db.collection('products').insertOne(product);
+          return NextResponse.json(product);
+        } else if (config.type === 'postgresql') {
+          const pool = connection.connection;
+          await pool.query(
+            'INSERT INTO products (id, name, description, category, price, stock, min_stock, supplier, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+            [productId, productData.name, productData.description || '', productData.category || '', productData.price || 0, productData.stock || 0, productData.minStock || 0, productData.supplier || '', now, now]
+          );
+          
+          const result = await pool.query('SELECT * FROM products WHERE id = $1', [productId]);
+          return NextResponse.json(result.rows[0]);
+        }
+        break;
+      }
+
+      case 'sale': {
+        console.log('Creating sale...');
+        const saleData = await request.json();
+        
+        if (!saleData.productId || !saleData.quantity) {
+          return NextResponse.json({ error: 'Product ID and quantity are required' }, { status: 400 });
+        }
+
+        const saleId = crypto.randomUUID();
+        const now = formatDateForMySQL(new Date());
+        
+        if (config.type === 'mysql') {
+          const pool = connection.connection as mysql.Pool;
+          await pool.query(
+            'INSERT INTO sales (id, productId, productName, quantity, price, total, date, customer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [saleId, saleData.productId, saleData.productName || '', saleData.quantity, saleData.price || 0, saleData.total || 0, saleData.date || now, saleData.customer || '']
+          );
+          
+          const [result] = await pool.query<mysql.RowDataPacket[]>('SELECT * FROM sales WHERE id = ?', [saleId]);
+          return NextResponse.json(result[0]);
+        } else if (config.type === 'mongodb') {
+          const db = connection.connection;
+          const sale = {
+            id: saleId,
+            ...saleData,
+            date: saleData.date || now
+          };
+          await db.collection('sales').insertOne(sale);
+          return NextResponse.json(sale);
+        } else if (config.type === 'postgresql') {
+          const pool = connection.connection;
+          await pool.query(
+            'INSERT INTO sales (id, "productId", "productName", quantity, price, total, date, customer) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+            [saleId, saleData.productId, saleData.productName || '', saleData.quantity, saleData.price || 0, saleData.total || 0, saleData.date || now, saleData.customer || '']
+          );
+          
+          const result = await pool.query('SELECT * FROM sales WHERE id = $1', [saleId]);
+          return NextResponse.json(result.rows[0]);
         }
         break;
       }

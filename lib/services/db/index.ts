@@ -345,8 +345,10 @@ class DatabaseService {
       `CREATE TABLE IF NOT EXISTS settings (
         id VARCHAR(36) PRIMARY KEY,
         setting_key VARCHAR(255) NOT NULL UNIQUE,
-        value TEXT,
+        value LONGTEXT,
         type VARCHAR(50) NOT NULL,
+        description TEXT,
+        isEncrypted BOOLEAN DEFAULT FALSE,
         createdAt DATETIME NOT NULL,
         updatedAt DATETIME NOT NULL
       )`
@@ -354,6 +356,42 @@ class DatabaseService {
 
     for (const table of tables) {
       await pool.query(table);
+    }
+
+    // Add missing columns to existing settings table if they don't exist
+    await this.migrateMySQLSettingsTable(pool);
+  }
+
+  private async migrateMySQLSettingsTable(pool: mysql.Pool): Promise<void> {
+    try {
+      // Check if description column exists
+      const [columns] = await pool.query<mysql.RowDataPacket[]>(
+        "SHOW COLUMNS FROM settings LIKE 'description'"
+      );
+      if (columns.length === 0) {
+        await pool.query('ALTER TABLE settings ADD COLUMN description TEXT');
+        console.log('Added description column to settings table');
+      }
+
+      // Check if isEncrypted column exists
+      const [encryptedColumns] = await pool.query<mysql.RowDataPacket[]>(
+        "SHOW COLUMNS FROM settings LIKE 'isEncrypted'"
+      );
+      if (encryptedColumns.length === 0) {
+        await pool.query('ALTER TABLE settings ADD COLUMN isEncrypted BOOLEAN DEFAULT FALSE');
+        console.log('Added isEncrypted column to settings table');
+      }
+
+      // Check if value column is TEXT and needs to be upgraded to LONGTEXT
+      const [valueColumns] = await pool.query<mysql.RowDataPacket[]>(
+        "SHOW COLUMNS FROM settings WHERE Field = 'value'"
+      );
+      if (valueColumns.length > 0 && valueColumns[0].Type === 'text') {
+        await pool.query('ALTER TABLE settings MODIFY COLUMN value LONGTEXT');
+        console.log('Upgraded value column from TEXT to LONGTEXT for large image data');
+      }
+    } catch (error) {
+      console.error('Error migrating settings table:', error);
     }
   }
 
@@ -405,6 +443,8 @@ class DatabaseService {
         setting_key VARCHAR(255) NOT NULL UNIQUE,
         value TEXT,
         type VARCHAR(50) NOT NULL,
+        description TEXT,
+        is_encrypted BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP NOT NULL,
         updated_at TIMESTAMP NOT NULL
       )`
@@ -412,6 +452,48 @@ class DatabaseService {
 
     for (const table of tables) {
       await pool.query(table);
+    }
+
+    // Add missing columns to existing settings table if they don't exist
+    await this.migratePostgreSQLSettingsTable(pool);
+  }
+
+  private async migratePostgreSQLSettingsTable(pool: Pool): Promise<void> {
+    try {
+      // Check if description column exists
+      const descriptionResult = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'settings' AND column_name = 'description'
+      `);
+      if (descriptionResult.rows.length === 0) {
+        await pool.query('ALTER TABLE settings ADD COLUMN description TEXT');
+        console.log('Added description column to settings table');
+      }
+
+      // Check if is_encrypted column exists
+      const encryptedResult = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'settings' AND column_name = 'is_encrypted'
+      `);
+      if (encryptedResult.rows.length === 0) {
+        await pool.query('ALTER TABLE settings ADD COLUMN is_encrypted BOOLEAN DEFAULT FALSE');
+        console.log('Added is_encrypted column to settings table');
+      }
+
+      // Check if value column is VARCHAR and needs to be upgraded to TEXT
+      const valueResult = await pool.query(`
+        SELECT data_type, character_maximum_length
+        FROM information_schema.columns 
+        WHERE table_name = 'settings' AND column_name = 'value'
+      `);
+      if (valueResult.rows.length > 0 && valueResult.rows[0].data_type === 'character varying') {
+        await pool.query('ALTER TABLE settings ALTER COLUMN value TYPE TEXT');
+        console.log('Upgraded value column from VARCHAR to TEXT for large image data');
+      }
+    } catch (error) {
+      console.error('Error migrating settings table:', error);
     }
   }
 

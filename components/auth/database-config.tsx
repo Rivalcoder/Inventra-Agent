@@ -147,33 +147,35 @@ export function DatabaseConfigComponent({ onConfigChange, onTestConnection, init
   };
 
   return (
-    <Card className="w-full h-fit">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+    <Card className="w-full h-fit bg-transparent border-none shadow-none">
+      <CardHeader className="pb-4">
+        <CardTitle className="flex items-center gap-2 text-white">
           <Database className="h-5 w-5" />
           Database Configuration
         </CardTitle>
-        <CardDescription>
+        <CardDescription className="text-gray-300">
           Configure your database connection settings. Choose from MySQL, MongoDB, or PostgreSQL.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Database Type Selection */}
         <div className="space-y-3">
-          <Label>Database Type</Label>
+          <Label className="text-white">Database Type</Label>
           <div className="grid grid-cols-3 gap-3">
             {(['mysql', 'mongodb', 'postgresql'] as DatabaseType[]).map((type) => (
               <Button
                 key={type}
                 variant={selectedType === type ? 'default' : 'outline'}
                 className={`h-auto p-4 flex flex-col items-center gap-2 ${
-                  selectedType === type ? getDatabaseColor(type) : ''
+                  selectedType === type 
+                    ? 'bg-emerald-500 text-white border-emerald-500' 
+                    : 'bg-white/10 border-white/20 text-white hover:bg-white/20'
                 }`}
                 onClick={() => handleTypeChange(type)}
               >
                 {getDatabaseIcon(type)}
                 <span className="font-medium capitalize">{type}</span>
-                <Badge variant="secondary" className="text-xs">
+                <Badge variant="secondary" className="text-xs bg-white/20 text-white">
                   {type === 'mysql' && 'Popular'}
                   {type === 'mongodb' && 'NoSQL'}
                   {type === 'postgresql' && 'Advanced'}
@@ -187,55 +189,60 @@ export function DatabaseConfigComponent({ onConfigChange, onTestConnection, init
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="host">Host</Label>
+              <Label htmlFor="host" className="text-white">Host</Label>
               <Input
                 id="host"
                 value={config.host}
                 onChange={(e) => handleConfigChange('host', e.target.value)}
                 placeholder="localhost"
+                className="bg-white/10 border-white/20 text-white placeholder-gray-400"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="port">Port</Label>
+              <Label htmlFor="port" className="text-white">Port</Label>
               <Input
                 id="port"
                 type="number"
                 value={config.port}
                 onChange={(e) => handleConfigChange('port', parseInt(e.target.value))}
                 placeholder={defaultPorts[selectedType].toString()}
+                className="bg-white/10 border-white/20 text-white placeholder-gray-400"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username" className="text-white">Username</Label>
               <Input
                 id="username"
                 value={config.username}
                 onChange={(e) => handleConfigChange('username', e.target.value)}
                 placeholder={selectedType === 'mongodb' ? 'Optional' : 'root'}
+                className="bg-white/10 border-white/20 text-white placeholder-gray-400"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-white">Password</Label>
               <Input
                 id="password"
                 type="password"
                 value={config.password}
                 onChange={(e) => handleConfigChange('password', e.target.value)}
                 placeholder="Enter password"
+                className="bg-white/10 border-white/20 text-white placeholder-gray-400"
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="database">Database Name</Label>
+            <Label htmlFor="database" className="text-white">Database Name</Label>
             <Input
               id="database"
               value={config.database}
               onChange={(e) => handleConfigChange('database', e.target.value)}
               placeholder="ai_inventory"
+              className="bg-white/10 border-white/20 text-white placeholder-gray-400"
             />
           </div>
         </div>
@@ -246,16 +253,16 @@ export function DatabaseConfigComponent({ onConfigChange, onTestConnection, init
             variant="ghost"
             size="sm"
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className="p-0 h-auto"
+            className="p-0 h-auto text-white hover:text-gray-300"
           >
             <Server className="h-4 w-4 mr-2" />
             Advanced Options
           </Button>
           
           {showAdvanced && (
-            <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
+            <div className="space-y-4 p-4 border border-white/20 rounded-lg bg-white/5">
               <div className="flex items-center justify-between">
-                <Label htmlFor="ssl">Enable SSL</Label>
+                <Label htmlFor="ssl" className="text-white">Enable SSL</Label>
                 <Switch
                   id="ssl"
                   checked={config.options?.ssl || false}
@@ -264,7 +271,7 @@ export function DatabaseConfigComponent({ onConfigChange, onTestConnection, init
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="connectionLimit">Connection Limit</Label>
+                <Label htmlFor="connectionLimit" className="text-white">Connection Limit</Label>
                 <Input
                   id="connectionLimit"
                   type="number"
@@ -272,17 +279,18 @@ export function DatabaseConfigComponent({ onConfigChange, onTestConnection, init
                   onChange={(e) => handleConfigChange('options.connectionLimit', parseInt(e.target.value))}
                   min="1"
                   max="50"
+                  className="bg-white/10 border-white/20 text-white placeholder-gray-400"
                 />
               </div>
 
               {selectedType === 'mysql' && (
                 <div className="space-y-2">
-                  <Label htmlFor="charset">Character Set</Label>
+                  <Label htmlFor="charset" className="text-white">Character Set</Label>
                   <Select
                     value={config.options?.charset || 'utf8mb4'}
                     onValueChange={(value) => handleConfigChange('options.charset', value)}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-white/10 border-white/20 text-white">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -302,7 +310,7 @@ export function DatabaseConfigComponent({ onConfigChange, onTestConnection, init
           <Button
             onClick={handleTestConnection}
             disabled={testing}
-            className="w-full"
+            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-500"
             variant="outline"
           >
             {testing ? (
@@ -319,13 +327,13 @@ export function DatabaseConfigComponent({ onConfigChange, onTestConnection, init
           </Button>
 
           {testResult && (
-            <Alert className={testResult.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
+            <Alert className={testResult.success ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-red-500/50 bg-red-500/10'}>
               {testResult.success ? (
-                <CheckCircle className="h-4 w-4 text-green-600" />
+                <CheckCircle className="h-4 w-4 text-emerald-400" />
               ) : (
-                <XCircle className="h-4 w-4 text-red-600" />
+                <XCircle className="h-4 w-4 text-red-400" />
               )}
-              <AlertDescription className={testResult.success ? 'text-green-800' : 'text-red-800'}>
+              <AlertDescription className={testResult.success ? 'text-emerald-300' : 'text-red-300'}>
                 {testResult.message}
               </AlertDescription>
             </Alert>
@@ -333,24 +341,24 @@ export function DatabaseConfigComponent({ onConfigChange, onTestConnection, init
         </div>
 
         {/* Database Info */}
-        <div className="p-4 border rounded-lg bg-blue-50">
-          <h4 className="font-medium text-blue-900 mb-2">Database Information</h4>
-          <div className="text-sm text-blue-700 space-y-1">
+        <div className="p-4 border border-white/20 rounded-lg bg-white/5">
+          <h4 className="font-medium text-white mb-2">Database Information</h4>
+          <div className="text-sm text-gray-300 space-y-1">
             <p><strong>Type:</strong> {selectedType.toUpperCase()}</p>
             <p><strong>Host:</strong> {config.host}:{config.port}</p>
             <p><strong>Database:</strong> {config.database}</p>
             {selectedType === 'mysql' && (
-              <p className="text-xs mt-2">
+              <p className="text-xs mt-2 text-gray-400">
                 MySQL is recommended for most use cases. It's widely supported and has excellent performance.
               </p>
             )}
             {selectedType === 'mongodb' && (
-              <p className="text-xs mt-2">
+              <p className="text-xs mt-2 text-gray-400">
                 MongoDB is great for flexible document storage. No authentication required for local development.
               </p>
             )}
             {selectedType === 'postgresql' && (
-              <p className="text-xs mt-2">
+              <p className="text-xs mt-2 text-gray-400">
                 PostgreSQL offers advanced features and ACID compliance. Great for complex applications.
               </p>
             )}

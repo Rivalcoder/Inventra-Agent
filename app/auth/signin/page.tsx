@@ -137,8 +137,9 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [authMode, setAuthMode] = useState<'airtable' | 'local'>(configService.getAuthMode());
-  const [isDemoMode, setIsDemoMode] = useState(configService.isDemoMode());
+  const [authMode, setAuthMode] = useState<'airtable' | 'local'>('local');
+  const [isClient, setIsClient] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(true);
 
   const [formData, setFormData] = useState({
@@ -175,10 +176,21 @@ export default function SignInPage() {
     }
   }, [authMode]);
 
+  // Initialize client-side state and auth mode
+  useEffect(() => {
+    setIsClient(true);
+    const savedAuthMode = configService.getAuthMode();
+    const savedDemoMode = configService.isDemoMode();
+    setAuthMode(savedAuthMode);
+    setIsDemoMode(savedDemoMode);
+  }, []);
+
   // Update auth mode when it changes
   useEffect(() => {
-    configService.setAuthMode(authMode);
-  }, [authMode]);
+    if (isClient) {
+      configService.setAuthMode(authMode);
+    }
+  }, [authMode, isClient]);
 
   // Online/offline detection
   useEffect(() => {
@@ -312,7 +324,11 @@ export default function SignInPage() {
       setError('Please fill in all Create Account fields');
       return;
     }
-    const created = await localAuthService.createUser({
+    if (!localService) {
+      setError('Local service not available');
+      return;
+    }
+    const created = await localService.createUser({
       name: createAccountData.name,
       email: createAccountData.email,
       password: createAccountData.password,
@@ -429,96 +445,109 @@ export default function SignInPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <Tabs value={authMode} onValueChange={(value) => setAuthMode(value as 'airtable' | 'local')}>
-                    <TabsList className="grid w-full grid-cols-2 bg-white/10 mb-6">
-                      <TabsTrigger 
-                        value="airtable" 
-                        className="data-[state=active]:bg-emerald-500 data-[state=active]:text-white"
-                      >
-                        <Cloud className="w-4 h-4 mr-2" />
-                        Cloud
-                      </TabsTrigger>
-                      <TabsTrigger 
-                        value="local" 
-                        className="data-[state=active]:bg-emerald-500 data-[state=active]:text-white"
-                      >
-                        <Database className="w-4 h-4 mr-2" />
-                        Local
-                      </TabsTrigger>
-                    </TabsList>
-                    
-                    <TabsContent value="airtable" className="space-y-4">
-                      <div className="flex items-start space-x-3 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                        <Cloud className="w-8 h-8 text-emerald-400 mt-1" />
-                        <div>
-                          <h3 className="font-semibold text-white text-lg">Cloud Authentication</h3>
-                          <p className="text-gray-300 text-sm mt-1">Secure cloud-based authentication using Airtable</p>
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-3 text-sm text-gray-300">
-                        <div className="flex items-center space-x-2">
-                          <Shield className="w-4 h-4 text-emerald-400" />
-                          <span>Data stored securely in the cloud</span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Zap className="w-4 h-4 text-emerald-400" />
-                          <span>Cross-device synchronization</span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Cloud className="w-4 h-4 text-emerald-400" />
-                          <span>Requires internet connection</span>
-                        </div>
-                      </div>
-                      
-                      {isDemoMode && (
-                        <Button 
-                          onClick={handleDemoSignIn}
-                          variant="outline" 
-                          size="sm" 
-                          className="w-full border-emerald-500 text-emerald-400 hover:bg-emerald-500 hover:text-white"
-                        >
-                          Try Demo (demo@airtable.com)
-                        </Button>
-                      )}
-                    </TabsContent>
-                    
-                    <TabsContent value="local" className="space-y-4">
-                      <div className="flex items-start space-x-3 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                        <Database className="w-8 h-8 text-emerald-400 mt-1" />
-                        <div>
-                          <h3 className="font-semibold text-white text-lg">Local Authentication</h3>
-                          <p className="text-gray-300 text-sm mt-1">Privacy-focused local authentication system</p>
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-3 text-sm text-gray-300">
-                        <div className="flex items-center space-x-2">
-                          <Shield className="w-4 h-4 text-emerald-400" />
-                          <span>Data stored locally in your browser</span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Zap className="w-4 h-4 text-emerald-400" />
-                          <span>Works offline</span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Database className="w-4 h-4 text-emerald-400" />
-                          <span>No external dependencies</span>
-                        </div>
-                      </div>
-                      
-                      {isDemoMode && (
-                        <Button 
-                          onClick={handleDemoSignIn}
-                          variant="outline" 
-                          size="sm" 
-                          className="w-full border-emerald-500 text-emerald-400 hover:bg-emerald-500 hover:text-white"
-                        >
-                          Try Demo (demo@local.com)
-                        </Button>
-                      )}
-                    </TabsContent>
-                  </Tabs>
+                   {isClient ? (
+                     <Tabs value={authMode} onValueChange={(value) => setAuthMode(value as 'airtable' | 'local')}>
+                       <TabsList className="grid w-full grid-cols-2 bg-white/10 mb-6">
+                         <TabsTrigger 
+                           value="airtable" 
+                           className="data-[state=active]:bg-emerald-500 data-[state=active]:text-white"
+                         >
+                           <Cloud className="w-4 h-4 mr-2" />
+                           Cloud
+                         </TabsTrigger>
+                         <TabsTrigger 
+                           value="local" 
+                           className="data-[state=active]:bg-emerald-500 data-[state=active]:text-white"
+                         >
+                           <Database className="w-4 h-4 mr-2" />
+                           Local
+                         </TabsTrigger>
+                       </TabsList>
+                       
+                       <TabsContent value="airtable" className="space-y-4">
+                         <div className="flex items-start space-x-3 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                           <Cloud className="w-8 h-8 text-emerald-400 mt-1" />
+                           <div>
+                             <h3 className="font-semibold text-white text-lg">Cloud Authentication</h3>
+                             <p className="text-gray-300 text-sm mt-1">Secure cloud-based authentication using Airtable</p>
+                           </div>
+                         </div>
+                         
+                         <div className="space-y-3 text-sm text-gray-300">
+                           <div className="flex items-center space-x-2">
+                             <Shield className="w-4 h-4 text-emerald-400" />
+                             <span>Data stored securely in the cloud</span>
+                           </div>
+                           <div className="flex items-center space-x-2">
+                             <Zap className="w-4 h-4 text-emerald-400" />
+                             <span>Cross-device synchronization</span>
+                           </div>
+                           <div className="flex items-center space-x-2">
+                             <Cloud className="w-4 h-4 text-emerald-400" />
+                             <span>Requires internet connection</span>
+                           </div>
+                         </div>
+                         
+                         {isDemoMode && (
+                           <Button 
+                             onClick={handleDemoSignIn}
+                             variant="outline" 
+                             size="sm" 
+                             className="w-full border-emerald-500 text-emerald-400 hover:bg-emerald-500 hover:text-white"
+                           >
+                             Try Demo (demo@airtable.com)
+                           </Button>
+                         )}
+                       </TabsContent>
+                       
+                       <TabsContent value="local" className="space-y-4">
+                         <div className="flex items-start space-x-3 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                           <Database className="w-8 h-8 text-emerald-400 mt-1" />
+                           <div>
+                             <h3 className="font-semibold text-white text-lg">Local Authentication</h3>
+                             <p className="text-gray-300 text-sm mt-1">Privacy-focused local authentication system</p>
+                           </div>
+                         </div>
+                         
+                         <div className="space-y-3 text-sm text-gray-300">
+                           <div className="flex items-center space-x-2">
+                             <Shield className="w-4 h-4 text-emerald-400" />
+                             <span>Data stored locally in your browser</span>
+                           </div>
+                           <div className="flex items-center space-x-2">
+                             <Zap className="w-4 h-4 text-emerald-400" />
+                             <span>Works offline</span>
+                           </div>
+                           <div className="flex items-center space-x-2">
+                             <Database className="w-4 h-4 text-emerald-400" />
+                             <span>No external dependencies</span>
+                           </div>
+                         </div>
+                         
+                         {isDemoMode && (
+                           <Button 
+                             onClick={handleDemoSignIn}
+                             variant="outline" 
+                             size="sm" 
+                             className="w-full border-emerald-500 text-emerald-400 hover:bg-emerald-500 hover:text-white"
+                           >
+                             Try Demo (demo@local.com)
+                           </Button>
+                         )}
+                       </TabsContent>
+                     </Tabs>
+                   ) : (
+                     <div className="grid w-full grid-cols-2 bg-white/10 mb-6 rounded-md p-1">
+                       <div className="bg-emerald-500 text-white rounded-sm px-3 py-2 flex items-center justify-center">
+                         <Database className="w-4 h-4 mr-2" />
+                         Local
+                       </div>
+                       <div className="text-white rounded-sm px-3 py-2 flex items-center justify-center">
+                         <Cloud className="w-4 h-4 mr-2" />
+                         Cloud
+                       </div>
+                     </div>
+                   )}
                 </CardContent>
               </Card>
             </motion.div>

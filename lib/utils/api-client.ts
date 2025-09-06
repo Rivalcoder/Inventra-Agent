@@ -7,7 +7,9 @@ export class ApiClient {
     const userDbConfig = localStorage.getItem('databaseConfig');
     if (userDbConfig) {
       try {
-        return JSON.parse(userDbConfig);
+        const config = JSON.parse(userDbConfig);
+        console.log('Using user database config:', config);
+        return config;
       } catch (error) {
         console.error('Error parsing database config:', error);
         return null;
@@ -18,13 +20,16 @@ export class ApiClient {
     const defaultConfig = localStorage.getItem('default_db_config');
     if (defaultConfig) {
       try {
-        return JSON.parse(defaultConfig);
+        const config = JSON.parse(defaultConfig);
+        console.log('Using default database config:', config);
+        return config;
       } catch (error) {
         console.error('Error parsing default config:', error);
         return null;
       }
     }
     
+    console.log('No database configuration found');
     return null;
   }
 
@@ -37,6 +42,9 @@ export class ApiClient {
     const dbConfig = this.getDatabaseConfig();
     if (dbConfig) {
       headers['x-user-db-config'] = JSON.stringify(dbConfig);
+      console.log('Added database config to headers');
+    } else {
+      console.log('No database config available for headers');
     }
 
     return headers;

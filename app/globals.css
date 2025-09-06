@@ -42,27 +42,27 @@ html, body {
 
 @layer base {
   :root {
-    --background: 220 20% 98%;
-    --foreground: 220 13% 18%;
-    --card: 0 0% 100%;
-    --card-foreground: 220 13% 18%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 13% 18%;
-    /* Switched primary/ring/accent to emerald/teal family */
-    --primary: 160 84% 39%;
+    --background: 220 20% 95%;
+    --foreground: 220 13% 15%;
+    --card: 0 0% 98%;
+    --card-foreground: 220 13% 15%;
+    --popover: 0 0% 98%;
+    --popover-foreground: 220 13% 15%;
+    /* Switched primary/ring/accent to blue family for better visibility */
+    --primary: 217 91% 60%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 20% 96%;
-    --secondary-foreground: 220 13% 18%;
-    --muted: 220 20% 92%;
-    --muted-foreground: 220 13% 50%;
-    --accent: 162 66% 85%;
-    --accent-foreground: 161 94% 30%;
+    --secondary: 220 20% 94%;
+    --secondary-foreground: 220 13% 15%;
+    --muted: 220 20% 90%;
+    --muted-foreground: 220 13% 45%;
+    --accent: 217 91% 90%;
+    --accent-foreground: 217 91% 20%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 20% 90%;
-    --input: 220 20% 90%;
-    --ring: 160 84% 39%;
-    --chart-1: 160 84% 39%; /* Emerald */
+    --border: 220 20% 88%;
+    --input: 220 20% 88%;
+    --ring: 217 91% 60%;
+    --chart-1: 217 91% 60%; /* Blue */
     --chart-2: 191 97% 77%;  /* Sky */
     --chart-3: 45 100% 60%;  /* Yellow */
     --chart-4: 12 90% 65%;   /* Orange */
@@ -110,6 +110,20 @@ html, body {
     font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
     font-weight: 700;
     letter-spacing: -0.01em;
+  }
+  
+  /* Improve text readability */
+  body {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  
+  .text-sm {
+    font-size: 13px;
+  }
+  
+  .text-xs {
+    font-size: 12px;
   }
   a {
     @apply text-primary;

@@ -116,8 +116,9 @@ export default function SignUpPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [authMode, setAuthMode] = useState<'airtable' | 'local'>(configService.getAuthMode());
-  const [isDemoMode, setIsDemoMode] = useState(configService.isDemoMode());
+  const [authMode, setAuthMode] = useState<'airtable' | 'local'>('local');
+  const [isClient, setIsClient] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [cloudTestLoading, setCloudTestLoading] = useState(false);
   const [cloudTestMessage, setCloudTestMessage] = useState('');
@@ -143,10 +144,21 @@ export default function SignUpPage() {
     confirmPassword: ''
   });
 
+  // Initialize client-side state and auth mode
+  useEffect(() => {
+    setIsClient(true);
+    const savedAuthMode = configService.getAuthMode();
+    const savedDemoMode = configService.isDemoMode();
+    setAuthMode(savedAuthMode);
+    setIsDemoMode(savedDemoMode);
+  }, []);
+
   // Update auth mode when it changes
   useEffect(() => {
-    configService.setAuthMode(authMode);
-  }, [authMode]);
+    if (isClient) {
+      configService.setAuthMode(authMode);
+    }
+  }, [authMode, isClient]);
 
   // Online/offline detection
   useEffect(() => {
@@ -365,18 +377,31 @@ export default function SignUpPage() {
 
             {/* Mode Toggle Below Subtitle */}
             <div className="mt-4 flex items-center justify-center">
-              <Tabs value={authMode} onValueChange={(value) => setAuthMode(value as 'airtable' | 'local')}>
-                <TabsList className="grid grid-cols-2 bg-white/10 rounded-full p-1">
-                  <TabsTrigger value="airtable" className="data-[state=active]:bg-emerald-500 data-[state=active]:text-white rounded-full px-6 py-3 flex items-center gap-2">
-                    <Cloud className="w-4 h-4" />
-                    Cloud
-                  </TabsTrigger>
-                  <TabsTrigger value="local" className="data-[state=active]:bg-emerald-500 data-[state=active]:text-white rounded-full px-6 py-3 flex items-center gap-2">
+              {isClient ? (
+                <Tabs value={authMode} onValueChange={(value) => setAuthMode(value as 'airtable' | 'local')}>
+                  <TabsList className="grid grid-cols-2 bg-white/10 rounded-full p-1 w-fit">
+                    <TabsTrigger value="airtable" className="data-[state=active]:bg-emerald-500 data-[state=active]:text-white rounded-full px-4 py-2 flex items-center gap-2 text-sm">
+                      <Cloud className="w-4 h-4" />
+                      Cloud
+                    </TabsTrigger>
+                    <TabsTrigger value="local" className="data-[state=active]:bg-emerald-500 data-[state=active]:text-white rounded-full px-4 py-2 flex items-center gap-2 text-sm">
+                      <Database className="w-4 h-4" />
+                      Local
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              ) : (
+                <div className="grid grid-cols-2 bg-white/10 rounded-full p-1 w-fit">
+                  <div className="rounded-full px-4 py-2 flex items-center gap-2 text-sm bg-emerald-500 text-white">
                     <Database className="w-4 h-4" />
                     Local
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+                  </div>
+                  <div className="rounded-full px-4 py-2 flex items-center gap-2 text-sm text-white">
+                    <Cloud className="w-4 h-4" />
+                    Cloud
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -427,7 +452,88 @@ export default function SignUpPage() {
 
           {/* Main Content - Left Right Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Left Side - Authentication Mode & Database Configuration */}
+            {/* Left Side - Database Configuration */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, delay: 0.1 }}
+              className="space-y-6"
+            >
+              {/* Database Configuration (Step 2) */}
+              {step === 2 && isClient && authMode === 'local' && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="h-[calc(100vh-250px)] overflow-y-auto rounded-lg"
+                >
+                  <Card className="shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20 w-full h-fit">
+                    <CardHeader>
+                      <CardTitle className="text-white text-lg flex items-center">
+                        <Database className="w-5 h-5 mr-2" />
+                        Local Database (MySQL)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <DatabaseConfigComponent
+                        onConfigChange={handleDatabaseConfigChange}
+                        onTestConnection={handleTestConnection}
+                        initialConfig={databaseConfig}
+                      />
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+
+              {step === 2 && isClient && authMode === 'airtable' && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="h-[calc(100vh-250px)] overflow-y-auto rounded-lg"
+                >
+                  <Card className="shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20 w-full h-fit">
+                    <CardHeader>
+                      <CardTitle className="text-white text-lg flex items-center">
+                        <Cloud className="w-5 h-5 mr-2" />
+                        Cloud Database (MongoDB)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4 text-gray-300">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="col-span-1 sm:col-span-2">
+                          <div className="text-white font-medium mb-2">Cloud Database</div>
+                          <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                            <Globe className="w-4 h-4 text-emerald-400" />
+                            <span className="text-emerald-300">MongoDB (recommended)</span>
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="text-white">Cluster</Label>
+                          <div className="mt-2 text-gray-300">cluster0.mongodb.net</div>
+                        </div>
+                        <div>
+                          <Label className="text-white">Database Name</Label>
+                          <div className="mt-2 text-gray-300">ai_inventory</div>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-400">We auto-configured recommended MongoDB settings for cloud. Use Test Connection to verify access.</div>
+                      <div className="flex items-center gap-3">
+                        <Button onClick={async () => { setCloudTestMessage(''); setCloudTestSuccess(null); setCloudTestLoading(true); const ok = await handleTestConnection(databaseConfig); setCloudTestSuccess(ok); setCloudTestMessage(ok ? 'Connection successful.' : 'Connection failed. Check credentials or network.'); setCloudTestLoading(false); }}
+                          className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white h-11 font-semibold">
+                          {cloudTestLoading ? 'Testing...' : 'Test Connection'}
+                        </Button>
+                        {cloudTestSuccess !== null && (
+                          <span className={cloudTestSuccess ? 'text-emerald-400' : 'text-red-400'}>{cloudTestMessage}</span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+            </motion.div>
+
+            {/* Right Side - Account Information */}
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -437,7 +543,7 @@ export default function SignUpPage() {
                 <CardHeader>
                   <CardTitle className="text-white text-xl flex items-center">
                     <User className="w-6 h-6 mr-3" />
-                    Account Information - {authMode === 'airtable' ? 'Cloud Mode' : 'Local Mode'}
+                    Account Information - {isClient ? (authMode === 'airtable' ? 'Cloud Mode' : 'Local Mode') : 'Local Mode'}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -540,89 +646,6 @@ export default function SignUpPage() {
                   </div>
                 </CardContent>
               </Card>
-            </motion.div>
-
-            {/* Right Side - Account Creation Form */}
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3, delay: 0.1 }}
-              className="space-y-6"
-            >
-
-
-              {/* Database Configuration (Step 2) */}
-              {step === 2 && authMode === 'local' && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="h-[calc(100vh-210px)] overflow-y-scroll rounded-lg [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
-                >
-                  <Card className="shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20 w-full h-fit">
-                    <CardHeader>
-                      <CardTitle className="text-white text-lg flex items-center">
-                        <Database className="w-5 h-5 mr-2" />
-                        Local Database (MySQL)
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <DatabaseConfigComponent
-                        onConfigChange={handleDatabaseConfigChange}
-                        onTestConnection={handleTestConnection}
-                        initialConfig={databaseConfig}
-                      />
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              )}
-
-              {step === 2 && authMode === 'airtable' && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="h-[calc(100vh-210px)] overflow-y-scroll rounded-lg [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
-                >
-                  <Card className="shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20 w-full h-fit">
-                    <CardHeader>
-                      <CardTitle className="text-white text-lg flex items-center">
-                        <Cloud className="w-5 h-5 mr-2" />
-                        Create Online Account
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4 text-gray-300">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="col-span-1 sm:col-span-2">
-                          <div className="text-white font-medium mb-2">Cloud Database</div>
-                          <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                            <Globe className="w-4 h-4 text-emerald-400" />
-                            <span className="text-emerald-300">MongoDB (recommended)</span>
-                          </div>
-                        </div>
-                        <div>
-                          <Label className="text-white">Cluster</Label>
-                          <div className="mt-2">cluster0.mongodb.net</div>
-                        </div>
-                        <div>
-                          <Label className="text-white">Database Name</Label>
-                          <div className="mt-2">ai_inventory</div>
-                        </div>
-                      </div>
-                      <div className="text-xs text-gray-400">We auto-configured recommended MongoDB settings for cloud. Use Test Connection to verify access.</div>
-                      <div className="flex items-center gap-3">
-                        <Button onClick={async () => { setCloudTestMessage(''); setCloudTestSuccess(null); setCloudTestLoading(true); const ok = await handleTestConnection(databaseConfig); setCloudTestSuccess(ok); setCloudTestMessage(ok ? 'Connection successful.' : 'Connection failed. Check credentials or network.'); setCloudTestLoading(false); }}
-                          className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white h-11 font-semibold">
-                          {cloudTestLoading ? 'Testing...' : 'Test Connection'}
-                        </Button>
-                        {cloudTestSuccess !== null && (
-                          <span className={cloudTestSuccess ? 'text-emerald-400' : 'text-red-400'}>{cloudTestMessage}</span>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              )}
             </motion.div>
           </div>
         </motion.div>

@@ -13,10 +13,11 @@ import { toast } from "sonner";
 import { Settings as SettingsIcon, User, Bell, Lock, Globe, Database, Upload } from "lucide-react";
 import { getSettings, createSetting, updateSetting } from "@/lib/data";
 import { getApiBase } from "@/lib/utils";
+import { ApiClient } from "@/lib/utils/api-client";
 import type { Settings as SettingsType } from "@/lib/types";
 import { useNotifications } from "@/lib/context/notification-context";
 import Image from "next/image";
-import JSZip from "jszip";
+// JSZip will be loaded dynamically when needed
 import { useCurrency } from '@/lib/context/currency-context';
 
 interface SettingsData {
@@ -44,55 +45,6 @@ interface DirectoryInputElement extends HTMLInputElement {
   directory: boolean;
 }
 
-// Add type declaration for showDirectoryPicker
-declare global {
-  interface Window {
-    showDirectoryPicker(): Promise<FileSystemDirectoryHandle>;
-  }
-}
-
-interface FileSystemDirectoryHandle {
-  name: string;
-}
-
-// Custom folder input component
-const FolderInput = ({ onFolderSelect }: { onFolderSelect: (path: string) => void }) => {
-  const [selectedPath, setSelectedPath] = useState('');
-
-  const handleFolderSelect = async () => {
-    try {
-      // Create a directory picker
-      const dirHandle = await window.showDirectoryPicker();
-      const path = dirHandle.name;
-      
-      // Update the UI
-      setSelectedPath(path);
-      onFolderSelect(path);
-    } catch (error: any) {
-      if (error.name !== 'AbortError') {
-        console.error('Error selecting folder:', error);
-        toast.error("Failed to select folder");
-      }
-    }
-  };
-
-  return (
-    <div className="flex gap-2">
-      <Input 
-        placeholder="Select backup folder"
-        value={selectedPath}
-        readOnly
-      />
-      <Button 
-        variant="outline" 
-        onClick={handleFolderSelect}
-      >
-        Select Folder
-      </Button>
-    </div>
-  );
-};
-
 
 
 // Helper function to convert data to CSV
@@ -113,6 +65,8 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [lastBackupTime, setLastBackupTime] = useState<string | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [originalSettings, setOriginalSettings] = useState<SettingsData | null>(null);
   const [settings, setSettings] = useState<SettingsData>({
     companyName: "",
     currency: "inr",
@@ -135,13 +89,16 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { setCurrency } = useCurrency();
 
-  // Add new state for backup
+  // State for backup functionality
   const [selectedPath, setSelectedPath] = useState('');
 
   useEffect(() => {
     const initializeSettings = async () => {
       try {
+        console.log('Initializing settings...');
         const allSettings = await getSettings();
+        console.log('Retrieved settings:', allSettings);
+        
         if (allSettings.length === 0) {
           console.log('No settings found, creating initial settings...');
           await handleSave();
@@ -152,21 +109,52 @@ export default function SettingsPage() {
       } catch (error) {
         console.error('Error initializing settings:', error);
         toast.error("Failed to initialize settings");
+        // Try to create default settings if loading fails
+        try {
+          console.log('Attempting to create default settings...');
+          await handleSave();
+        } catch (saveError) {
+          console.error('Failed to create default settings:', saveError);
+        }
       }
     };
 
-    initializeSettings();
+    // Add a small delay to ensure database is ready
+    const timer = setTimeout(() => {
+      initializeSettings();
+    }, 1000);
+
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
     setSettings(prev => ({ ...prev, theme: theme || "system" }));
   }, [theme]);
 
+  // Add beforeunload warning for unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+        return 'You have unsaved changes. Are you sure you want to leave?';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
   const loadSettings = async () => {
     try {
       console.log('Loading settings...');
       const allSettings = await getSettings();
       console.log('Received settings:', allSettings);
+      
+      if (!allSettings || allSettings.length === 0) {
+        console.log('No settings found, will create default settings');
+        return;
+      }
       
       const settingsData: Partial<SettingsData> = {};
       
@@ -198,6 +186,9 @@ export default function SettingsPage() {
 
       console.log('Processed settings data:', settingsData);
       setSettings(prev => ({ ...prev, ...settingsData }));
+      setOriginalSettings({ ...settings, ...settingsData });
+      setHasUnsavedChanges(false);
+      console.log('Settings loaded successfully:', settingsData);
     } catch (error) {
       console.error('Error loading settings:', error);
       toast.error("Failed to load settings");
@@ -248,6 +239,8 @@ export default function SettingsPage() {
       // Reload settings after saving
       await loadSettings();
       toast.success("Settings saved successfully");
+      setHasUnsavedChanges(false);
+      setOriginalSettings({ ...settings });
       // After saving settings, update currency context
       setCurrency(settings.currency.toUpperCase());
     } catch (error) {
@@ -263,6 +256,7 @@ export default function SettingsPage() {
       setTheme(value as string);
     }
     setSettings(prev => ({ ...prev, [key]: value }));
+    setHasUnsavedChanges(true);
 
     // Add notification for important setting changes
     if (key === 'emailNotifications' && value === true) {
@@ -288,22 +282,23 @@ export default function SettingsPage() {
 
   const handleExportDatabase = async () => {
     try {
-      // Fetch data from the API
-      const response = await fetch(`${getApiBase()}/api/db?action=export-database`);
+      // Fetch data from the API using proper authentication
+      const response = await ApiClient.get(`${getApiBase()}/api/db?action=export-database`);
       if (!response.ok) {
         throw new Error('Failed to export database');
       }
       const data = await response.json();
       
       // Convert data to CSV format
-      const productsCSV = convertToCSV(data.products, [
+      const productsCSV = convertToCSV(data.products || [], [
         'id', 'name', 'description', 'price', 'quantity', 'category', 'createdAt', 'updatedAt'
       ]);
-      const salesCSV = convertToCSV(data.sales, [
+      const salesCSV = convertToCSV(data.sales || [], [
         'id', 'product_id', 'quantity', 'total_price', 'sale_date', 'createdAt', 'updatedAt'
       ]);
 
-      // Create a zip file
+      // Create a zip file using dynamic import
+      const JSZip = (await import('jszip')).default;
       const zip = new JSZip();
       zip.file('inventory.csv', productsCSV);
       zip.file('sales.csv', salesCSV);
@@ -361,13 +356,7 @@ export default function SettingsPage() {
             }, {} as any);
           });
 
-          const response = await fetch(`${getApiBase()}/api/db?action=import-${importType}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ data }),
-          });
+          const response = await ApiClient.post(`${getApiBase()}/api/db?action=import-${importType}`, { data });
 
           if (!response.ok) {
             throw new Error(`Failed to import ${importType} data`);
@@ -495,17 +484,18 @@ export default function SettingsPage() {
               }
               const data = await response.json();
 
-              // Create a new zip file
+              // Create a new zip file using dynamic import
+              const JSZip = (await import('jszip')).default;
               const zip = new JSZip();
 
               // Convert products to CSV
-              const productsCsv = convertToCSV(data.products, [
+              const productsCsv = convertToCSV(data.products || [], [
                 'id', 'name', 'description', 'category', 'price', 'stock', 'minStock', 'supplier', 'createdAt', 'updatedAt'
               ]);
               zip.file('inventory.csv', productsCsv);
 
               // Convert sales to CSV
-              const salesCsv = convertToCSV(data.sales, [
+              const salesCsv = convertToCSV(data.sales || [], [
                 'id', 'productId', 'productName', 'quantity', 'price', 'total', 'date', 'customer'
               ]);
               zip.file('sales.csv', salesCsv);
@@ -579,6 +569,8 @@ export default function SettingsPage() {
       reader.onload = async (e) => {
         const base64String = e.target?.result as string;
         setSettings(prev => ({ ...prev, logo: base64String }));
+        setHasUnsavedChanges(true);
+        toast.success("Logo uploaded successfully");
         
         // Save the logo setting
         await updateSetting({
@@ -1065,8 +1057,12 @@ export default function SettingsPage() {
       </Tabs>
 
       <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={isSaving}>
-          {isSaving ? "Saving..." : "Save Changes"}
+        <Button 
+          onClick={handleSave} 
+          disabled={isSaving}
+          variant={hasUnsavedChanges ? "default" : "outline"}
+        >
+          {isSaving ? "Saving..." : hasUnsavedChanges ? "Save Changes *" : "Save Changes"}
         </Button>
       </div>
     </div>

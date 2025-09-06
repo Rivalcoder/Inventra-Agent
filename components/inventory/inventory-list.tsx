@@ -186,7 +186,7 @@ export function InventoryList({ initialProducts }: InventoryListProps) {
                             ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border border-red-300"
                             : product.stock <= product.minStock
                             ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-300"
-                            : "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border border-green-300"
+                            : "bg-gray-100 text-gray-800 dark:bg-gray-800/50 dark:text-gray-200 border border-gray-300 dark:border-gray-600"
                           }`
                         }
                         title={
@@ -202,7 +202,7 @@ export function InventoryList({ initialProducts }: InventoryListProps) {
                         ) : product.stock <= product.minStock ? (
                           <AlertTriangle className="w-4 h-4 mr-1 text-amber-500" />
                         ) : (
-                          <CheckCircle className="w-4 h-4 mr-1 text-green-500" />
+                          <CheckCircle className="w-4 h-4 mr-1 text-gray-600 dark:text-gray-400" />
                         )}
                         {product.stock}
                         <span className="ml-2 font-normal">

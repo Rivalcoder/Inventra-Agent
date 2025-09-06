@@ -108,26 +108,26 @@ export default function DatabaseSettingsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Database Settings</h1>
-          <p className="text-gray-600">Manage your database connection configuration</p>
+          <h1 className="text-3xl font-bold text-foreground">Database Settings</h1>
+          <p className="text-muted-foreground">Manage your database connection configuration</p>
         </div>
         <div className="flex items-center gap-2">
-          <Settings className="h-6 w-6 text-gray-400" />
+          <Settings className="h-6 w-6 text-muted-foreground" />
         </div>
       </div>
 
       {/* Alerts */}
       {error && (
-        <Alert className="border-red-200 bg-red-50">
-          <X className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800">{error}</AlertDescription>
+        <Alert className="border-destructive bg-destructive/10">
+          <X className="h-4 w-4 text-destructive" />
+          <AlertDescription className="text-destructive">{error}</AlertDescription>
         </Alert>
       )}
 
       {success && (
-        <Alert className="border-green-200 bg-green-50">
-          <Save className="h-4 w-4 text-green-600" />
-          <AlertDescription className="text-green-800">{success}</AlertDescription>
+        <Alert className="border-green-500 bg-green-500/10">
+          <Save className="h-4 w-4 text-green-500" />
+          <AlertDescription className="text-green-500">{success}</AlertDescription>
         </Alert>
       )}
 
@@ -200,7 +200,7 @@ export default function DatabaseSettingsPage() {
         <CardContent className="space-y-4">
           <div>
             <h4 className="font-medium mb-2">Supported Databases</h4>
-            <ul className="space-y-2 text-sm text-gray-600">
+            <ul className="space-y-2 text-sm text-muted-foreground">
               <li><strong>MySQL:</strong> Popular relational database with ACID compliance</li>
               <li><strong>MongoDB:</strong> NoSQL database with flexible document storage</li>
               <li><strong>PostgreSQL:</strong> Advanced open-source database with JSON support</li>
@@ -209,10 +209,10 @@ export default function DatabaseSettingsPage() {
           
           <div>
             <h4 className="font-medium mb-2">Local Development</h4>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               For local development, you can use:
             </p>
-            <ul className="text-sm text-gray-600 mt-2 space-y-1">
+            <ul className="text-sm text-muted-foreground mt-2 space-y-1">
               <li>• MySQL: XAMPP, WAMP, or Docker</li>
               <li>• MongoDB: MongoDB Community Server or Docker</li>
               <li>• PostgreSQL: PostgreSQL installer or Docker</li>
@@ -221,7 +221,7 @@ export default function DatabaseSettingsPage() {
 
           <div>
             <h4 className="font-medium mb-2">Security Note</h4>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               Database credentials are stored locally in your browser. For production use, 
               consider using environment variables and secure credential management.
             </p>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Package, 
@@ -223,8 +224,8 @@ export default function LandingPage() {
             transition={{ duration: 0.8, delay: 0.4 }}
             className="flex items-center space-x-4"
           >
-            <Button variant="ghost" className="text-white hover:text-emerald-400">
-              Docs
+            <Button variant="ghost" className="text-white hover:text-emerald-400" asChild>
+              <Link href="/docs">Docs</Link>
             </Button>
             <Button 
               variant="outline" 

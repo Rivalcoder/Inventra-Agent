@@ -307,15 +307,15 @@ export default function Dashboard() {
                 <p className="text-muted-foreground">No recent sales</p>
               )}
               {recentSales.map((sale) => (
-                <div key={sale.id} className="flex flex-col md:flex-row md:items-center md:justify-between p-4 bg-accent/40 rounded-lg transition-shadow hover:shadow-md">
+                <div key={sale.id} className="flex flex-col md:flex-row md:items-center md:justify-between p-4 bg-transparent dark:bg-transparent rounded-lg border border-border transition-all duration-200 hover:shadow-md hover:bg-muted/50 dark:hover:bg-muted/20">
                   <div className="flex-1">
-                    <h3 className="font-semibold text-base md:text-lg">{sale.productName}</h3>
+                    <h3 className="font-semibold text-base md:text-lg text-foreground">{sale.productName}</h3>
                     <p className="text-sm text-muted-foreground">
                       {sale.customer} • {new Date(sale.date).toLocaleDateString()}
                     </p>
                   </div>
                   <div className="mt-2 md:mt-0 md:ml-4 text-right">
-                    <span className="font-bold text-primary text-lg">{formatCurrency(sale.total, currency)}</span>
+                    <span className="font-bold text-foreground text-lg">{formatCurrency(sale.total, currency)}</span>
                     <div className="text-xs text-muted-foreground">{sale.quantity} x {formatCurrency(sale.price, currency)}</div>
                   </div>
                 </div>
