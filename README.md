@@ -15,11 +15,11 @@
 
 ---
 
-# 🚀 InventSmart AI
+# 🚀 Inventra-Agent
 
 > <span style="font-size:1.2em;">✨ <b>AI-Powered Inventory & Sales Management System</b> ✨</span>
 
-InventSmart AI is a modern, full-stack inventory and sales management platform supercharged with AI analytics and natural language querying. Track products, manage sales, generate beautiful reports, and get instant insights with the power of Google Gemini AI.
+Inventra-Agent is a modern, full-stack inventory and sales management platform supercharged with AI analytics and natural language querying. Track products, manage sales, generate beautiful reports, and get instant insights with the power of Google Gemini AI.
 
 ---
 
