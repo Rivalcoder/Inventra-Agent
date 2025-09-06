@@ -6,6 +6,7 @@ import {
   Brain, 
   Settings, 
   CheckCircle,
+  AlertCircle,
   ArrowRight,
   Users,
   FileText,

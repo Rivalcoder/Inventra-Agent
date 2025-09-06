@@ -85,7 +85,7 @@ export default function AddingProductsGuide() {
       field: "Category",
       required: true,
       description: "Product category for organization",
-      example: "Electronics > Audio",
+      example: "Electronics &gt; Audio",
       tips: "Choose or create categories that make sense for your business"
     },
     {
@@ -133,7 +133,7 @@ export default function AddingProductsGuide() {
       title: "Proper Categorization",
       description: "Organize products into logical categories for better management",
       tips: [
-        "Create hierarchical categories (e.g., Electronics > Audio > Headphones)",
+        "Create hierarchical categories (e.g., Electronics &gt; Audio &gt; Headphones)",
         "Use categories that match your business structure",
         "Keep category names simple and clear",
         "Review and update categories regularly"
@@ -373,7 +373,7 @@ Smart Watch,Fitness tracking,Electronics,199.99,25,5,TechSupply`}
                   </li>
                   <li className="flex items-start space-x-2">
                     <span className="w-5 h-5 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-semibold mt-0.5">2</span>
-                    <span>Go to Inventory > Import Products</span>
+                    <span>Go to Inventory &gt; Import Products</span>
                   </li>
                   <li className="flex items-start space-x-2">
                     <span className="w-5 h-5 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-semibold mt-0.5">3</span>
