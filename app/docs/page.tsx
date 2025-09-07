@@ -111,10 +111,10 @@ export default function DocsHomePage() {
       {/* Hero Section */}
       <div className="text-center space-y-4">
         <div className="flex items-center justify-center space-x-2 mb-4">
-          <BookOpen className="h-8 w-8 text-primary" />
-          <h1 className="text-4xl font-bold">InventSmart AI Documentation</h1>
+          <BookOpen className="h-8 w-8 md:h-10 md:w-10 text-primary shrink-0" />
+          <h1 className="text-3xl md:text-4xl font-bold">InventSmart AI Documentation</h1>
         </div>
-        <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+        <p className="text-base md:text-xl text-muted-foreground max-w-3xl mx-auto px-4">
           Complete guide to building and managing your AI-powered inventory and sales management system. 
           From installation to advanced features, everything you need to know.
         </p>
@@ -133,10 +133,10 @@ export default function DocsHomePage() {
       {/* Quick Start */}
       <section className="space-y-6">
         <div className="flex items-center space-x-2">
-          <Rocket className="h-6 w-6 text-primary" />
+          <Rocket className="h-6 w-6 text-primary shrink-0" />
           <h2 className="text-2xl font-semibold">Quick Start</h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {quickStartSteps.map((step) => (
             <Card key={step.step} className="relative overflow-hidden">
               <CardHeader className="pb-3">
@@ -152,7 +152,7 @@ export default function DocsHomePage() {
                 <Button asChild variant="outline" size="sm" className="w-full">
                   <Link href={step.href}>
                     Get Started
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                    <ArrowRight className="ml-2 h-4 w-4 shrink-0" />
                   </Link>
                 </Button>
               </CardContent>
@@ -164,16 +164,16 @@ export default function DocsHomePage() {
       {/* Features Overview */}
       <section className="space-y-6">
         <div className="flex items-center space-x-2">
-          <Package className="h-6 w-6 text-primary" />
+          <Package className="h-6 w-6 text-primary shrink-0" />
           <h2 className="text-2xl font-semibold">Core Features</h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {featureCards.map((feature) => (
             <Card key={feature.title} className="group hover:shadow-lg transition-shadow">
               <CardHeader>
                 <div className="flex items-center space-x-3">
-                  <div className={`w-12 h-12 bg-gradient-to-r ${feature.color} rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform`}>
-                    <feature.icon className="h-6 w-6 text-white" />
+                  <div className={`w-12 h-12 md:w-14 md:h-14 bg-gradient-to-r ${feature.color} rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                    <feature.icon className="h-6 w-6 md:h-7 md:w-7 text-white shrink-0" />
                   </div>
                   <div>
                     <CardTitle className="text-lg">{feature.title}</CardTitle>
@@ -185,7 +185,7 @@ export default function DocsHomePage() {
                 <Button asChild variant="outline" size="sm">
                   <Link href={feature.href}>
                     Learn More
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                    <ArrowRight className="ml-2 h-4 w-4 shrink-0" />
                   </Link>
                 </Button>
               </CardContent>
@@ -197,17 +197,17 @@ export default function DocsHomePage() {
       {/* Documentation Sections */}
       <section className="space-y-6">
         <div className="flex items-center space-x-2">
-          <BookOpen className="h-6 w-6 text-primary" />
+          <BookOpen className="h-6 w-6 text-primary shrink-0" />
           <h2 className="text-2xl font-semibold">Documentation Sections</h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {guideSections.map((section) => (
             <Card key={section.title} className="hover:shadow-lg transition-shadow">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center">
-                      <section.icon className="h-5 w-5 text-muted-foreground" />
+                    <div className="w-10 h-10 md:w-12 md:h-12 bg-muted rounded-lg flex items-center justify-center">
+                      <section.icon className="h-5 w-5 md:h-6 md:w-6 text-muted-foreground shrink-0" />
                     </div>
                     <div>
                       <CardTitle className="text-lg">{section.title}</CardTitle>
@@ -221,7 +221,7 @@ export default function DocsHomePage() {
                 <Button asChild variant="outline" size="sm" className="w-full">
                   <Link href={section.href}>
                     Explore
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                    <ArrowRight className="ml-2 h-4 w-4 shrink-0" />
                   </Link>
                 </Button>
               </CardContent>
@@ -233,14 +233,14 @@ export default function DocsHomePage() {
       {/* Key Benefits */}
       <section className="space-y-6">
         <div className="flex items-center space-x-2">
-          <CheckCircle className="h-6 w-6 text-primary" />
+          <CheckCircle className="h-6 w-6 text-primary shrink-0" />
           <h2 className="text-2xl font-semibold">Why Choose InventSmart AI?</h2>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <Card>
             <CardHeader>
               <div className="flex items-center space-x-2">
-                <Globe className="h-5 w-5 text-primary" />
+                <Globe className="h-5 w-5 text-primary shrink-0" />
                 <CardTitle className="text-lg">Modern Stack</CardTitle>
               </div>
             </CardHeader>
@@ -254,7 +254,7 @@ export default function DocsHomePage() {
           <Card>
             <CardHeader>
               <div className="flex items-center space-x-2">
-                <Shield className="h-5 w-5 text-primary" />
+                <Shield className="h-5 w-5 text-primary shrink-0" />
                 <CardTitle className="text-lg">Enterprise Ready</CardTitle>
               </div>
             </CardHeader>
@@ -268,7 +268,7 @@ export default function DocsHomePage() {
           <Card>
             <CardHeader>
               <div className="flex items-center space-x-2">
-                <Zap className="h-5 w-5 text-primary" />
+                <Zap className="h-5 w-5 text-primary shrink-0" />
                 <CardTitle className="text-lg">AI Powered</CardTitle>
               </div>
             </CardHeader>
@@ -290,13 +290,13 @@ export default function DocsHomePage() {
         <div className="flex items-center justify-center space-x-4">
           <Button asChild size="lg">
             <Link href="/docs/installation">
-              <Rocket className="mr-2 h-5 w-5" />
+              <Rocket className="mr-2 h-5 w-5 shrink-0" />
               Start Installation
             </Link>
           </Button>
           <Button asChild variant="outline" size="lg">
             <Link href="/docs/guides">
-              <Users className="mr-2 h-5 w-5" />
+              <Users className="mr-2 h-5 w-5 shrink-0" />
               View User Guides
             </Link>
           </Button>

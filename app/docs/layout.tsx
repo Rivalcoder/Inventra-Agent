@@ -25,7 +25,8 @@ import {
   Shield,
   Globe,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ChevronLeft
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -123,6 +124,7 @@ interface DocsLayoutProps {
 export default function DocsLayout({ children }: DocsLayoutProps) {
   const pathname = usePathname();
   const [expandedSections, setExpandedSections] = useState<string[]>(['Getting Started']);
+  const [mobileOpen, setMobileOpen] = useState<boolean>(false);
 
   const toggleSection = (title: string) => {
     setExpandedSections(prev => 
@@ -138,8 +140,19 @@ export default function DocsLayout({ children }: DocsLayoutProps) {
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center space-x-4">
+            {/* Mobile sidebar toggle */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              aria-label="Toggle navigation"
+              onClick={() => setMobileOpen(true)}
+            >
+              <ChevronRight className="h-5 w-5 shrink-0" />
+            </Button>
+
             <Link href="/" className="flex items-center space-x-2">
-              <BookOpen className="h-6 w-6 text-primary" />
+              <BookOpen className="h-6 w-6 text-primary shrink-0" />
               <span className="text-xl font-bold">InventSmart AI</span>
             </Link>
             <Separator orientation="vertical" className="h-6" />
@@ -153,9 +166,10 @@ export default function DocsLayout({ children }: DocsLayoutProps) {
         </div>
       </header>
 
-      <div className="container flex">
+      <div className="container flex flex-col md:flex-row">
         {/* Sidebar */}
-        <aside className="w-64 border-r bg-muted/30 min-h-[calc(100vh-4rem)]">
+        {/* Desktop sidebar */}
+        <aside className="hidden md:block md:w-64 md:border-r bg-muted/30 min-h-[calc(100vh-4rem)]">
           <ScrollArea className="h-full">
             <div className="p-4">
               <nav className="space-y-2">
@@ -167,15 +181,15 @@ export default function DocsLayout({ children }: DocsLayoutProps) {
                     <div key={section.title}>
                       <Button
                         variant={hasActiveChild ? "secondary" : "ghost"}
-                        className="w-full justify-start h-auto p-2"
+                        className="w-full justify-start h-auto p-3 text-sm"
                         onClick={() => toggleSection(section.title)}
                       >
-                        <section.icon className="mr-2 h-4 w-4" />
+                        <section.icon className="mr-2 h-5 w-5 shrink-0" />
                         <span className="flex-1 text-left">{section.title}</span>
                         {isExpanded ? (
-                          <ChevronUp className="h-4 w-4" />
+                          <ChevronUp className="h-4 w-4 shrink-0" />
                         ) : (
-                          <ChevronDown className="h-4 w-4" />
+                          <ChevronDown className="h-4 w-4 shrink-0" />
                         )}
                       </Button>
                       
@@ -192,7 +206,7 @@ export default function DocsLayout({ children }: DocsLayoutProps) {
                                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
                               )}
                             >
-                              <ChevronRight className="mr-2 h-3 w-3" />
+                              <ChevronRight className="mr-2 h-3 w-3 shrink-0" />
                               {child.title}
                             </Link>
                           ))}
@@ -206,9 +220,74 @@ export default function DocsLayout({ children }: DocsLayoutProps) {
           </ScrollArea>
         </aside>
 
+        {/* Mobile sidebar drawer */}
+        {mobileOpen && (
+          <div className="md:hidden fixed inset-0 z-50 flex">
+            <div className="w-72 max-w-[85%] h-full bg-background border-r">
+              <div className="flex items-center justify-between p-4 border-b">
+                <div className="flex items-center space-x-2">
+                  <BookOpen className="h-5 w-5 text-primary shrink-0" />
+                  <span className="font-semibold">Docs</span>
+                </div>
+                <Button variant="ghost" size="icon" aria-label="Close" onClick={() => setMobileOpen(false)}>
+                  <ChevronLeft className="h-5 w-5 shrink-0" />
+                </Button>
+              </div>
+              <ScrollArea className="h-[calc(100%-3rem)]">
+                <div className="p-3">
+                  <nav className="space-y-2">
+                    {docsNavigation.map((section) => {
+                      const isExpanded = expandedSections.includes(section.title);
+                      const hasActiveChild = section.children?.some(child => pathname === child.href);
+                      return (
+                        <div key={section.title}>
+                          <Button
+                            variant={hasActiveChild ? "secondary" : "ghost"}
+                            className="w-full justify-start h-auto p-3 text-sm"
+                            onClick={() => toggleSection(section.title)}
+                          >
+                            <section.icon className="mr-2 h-5 w-5 shrink-0" />
+                            <span className="flex-1 text-left">{section.title}</span>
+                            {isExpanded ? <ChevronUp className="h-4 w-4 shrink-0" /> : <ChevronDown className="h-4 w-4 shrink-0" />}
+                          </Button>
+                          {isExpanded && section.children && (
+                            <div className="ml-6 mt-1 space-y-1">
+                              {section.children.map((child) => (
+                                <Link
+                                  key={child.href}
+                                  href={child.href}
+                                  onClick={() => setMobileOpen(false)}
+                                  className={cn(
+                                    "flex items-center px-3 py-2 text-sm rounded-md transition-colors",
+                                    pathname === child.href
+                                      ? "bg-primary text-primary-foreground"
+                                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                                  )}
+                                >
+                                  <ChevronRight className="mr-2 h-3 w-3 shrink-0" />
+                                  {child.title}
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </nav>
+                </div>
+              </ScrollArea>
+            </div>
+            <button
+              aria-label="Close overlay"
+              className="flex-1 h-full bg-black/50"
+              onClick={() => setMobileOpen(false)}
+            />
+          </div>
+        )}
+
         {/* Main Content */}
-        <main className="flex-1 p-8">
-          <div className="max-w-4xl mx-auto">
+        <main className="flex-1 p-4 md:p-8">
+          <div className="max-w-5xl mx-auto w-full">
             {children}
           </div>
         </main>
