@@ -54,6 +54,10 @@ async function getDatabaseConfig(request: Request): Promise<DatabaseConfig> {
     
     if (configParam) {
       const config = JSON.parse(configParam);
+      if (config.type === 'mysql') {
+        const masked = typeof config.password === 'string' ? (config.password.length > 0 ? `${config.password[0]}***(${config.password.length})` : '(empty)') : '(unset)';
+        console.log('Resolved DB Config from URL (MySQL):', { host: config.host, port: config.port, username: config.username, password: masked, database: config.database });
+      }
       // Check for corrupted configurations (MongoDB only)
       if (config.type === 'mongodb') {
         if (config.host && (config.host.includes('gmail.com') || config.host.includes('yahoo.com') || config.host.includes('hotmail.com'))) {
@@ -70,6 +74,10 @@ async function getDatabaseConfig(request: Request): Promise<DatabaseConfig> {
     const userConfig = request.headers.get('x-user-db-config');
     if (userConfig) {
       const config = JSON.parse(userConfig);
+      if (config.type === 'mysql') {
+        const masked = typeof config.password === 'string' ? (config.password.length > 0 ? `${config.password[0]}***(${config.password.length})` : '(empty)') : '(unset)';
+        console.log('Resolved DB Config from Header (MySQL):', { host: config.host, port: config.port, username: config.username, password: masked, database: config.database });
+      }
       // Check for corrupted configurations (MongoDB only)
       if (config.type === 'mongodb') {
         if (config.host && (config.host.includes('gmail.com') || config.host.includes('yahoo.com') || config.host.includes('hotmail.com'))) {
@@ -105,7 +113,7 @@ async function getDatabaseConfig(request: Request): Promise<DatabaseConfig> {
       }
 
       // Fallback to local MySQL for quick dev start if no env Atlas credentials
-      return {
+      const cfg = {
         type: 'mysql',
         host: 'localhost',
         port: 3306,
@@ -117,7 +125,10 @@ async function getDatabaseConfig(request: Request): Promise<DatabaseConfig> {
           connectionLimit: 10,
           charset: 'utf8mb4'
         }
-      };
+      } as DatabaseConfig;
+      const masked = cfg.password.length > 0 ? `${cfg.password[0]}***(${cfg.password.length})` : '(empty)';
+      console.log('Resolved DB Config from DEV fallback (MySQL):', { host: cfg.host, port: cfg.port, username: cfg.username, password: masked, database: cfg.database });
+      return cfg;
     }
     
     // If no user config provided, throw error - user must be authenticated
@@ -141,8 +152,9 @@ async function initializeDatabase(config: DatabaseConfig) {
       if (config.type === 'mysql') {
         const pool = connection.connection as mysql.Pool;
         const [rows] = await pool.query<mysql.RowDataPacket[]>('SELECT COUNT(*) as count FROM products');
-        
-        if (rows[0].count === 0) {
+        const includeDummy = (config.options as any)?.includeDummyData !== false;
+
+        if (rows[0].count === 0 && includeDummy) {
           console.log('No existing data found. Inserting dummy data...');
           await insertDummyData(config);
         } else {
@@ -151,8 +163,9 @@ async function initializeDatabase(config: DatabaseConfig) {
       } else if (config.type === 'mongodb') {
         const db = connection.connection;
         const count = await db.collection('products').countDocuments();
-        
-        if (count === 0) {
+        const includeDummy = (config.options as any)?.includeDummyData !== false;
+
+        if (count === 0 && includeDummy) {
           console.log('No existing data found. Inserting dummy data...');
           await insertDummyData(config);
         } else {
@@ -161,8 +174,9 @@ async function initializeDatabase(config: DatabaseConfig) {
       } else if (config.type === 'postgresql') {
         const pool = connection.connection;
         const result = await pool.query('SELECT COUNT(*) as count FROM products');
-        
-        if (parseInt(result.rows[0].count) === 0) {
+        const includeDummy = (config.options as any)?.includeDummyData !== false;
+
+        if (parseInt(result.rows[0].count) === 0 && includeDummy) {
           console.log('No existing data found. Inserting dummy data...');
           await insertDummyData(config);
         } else {
@@ -304,8 +318,9 @@ async function insertDummyData(config: DatabaseConfig) {
       for (const product of dummyProducts) {
         try {
           console.log(`Inserting product: ${product.name} (ID: ${product.id})`);
+          // Idempotent upsert to avoid duplicate key errors if concurrent inserts happen
           await pool.query(
-            'INSERT INTO products (id, name, description, category, price, stock, minStock, supplier, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO products (id, name, description, category, price, stock, minStock, supplier, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE name=VALUES(name), description=VALUES(description), category=VALUES(category), price=VALUES(price), stock=VALUES(stock), minStock=VALUES(minStock), supplier=VALUES(supplier), updatedAt=VALUES(updatedAt)',
             [product.id, product.name, product.description, product.category, product.price, product.stock, product.minStock, product.supplier, product.createdAt, product.updatedAt]
           );
           insertedProductIds.add(product.id);
@@ -430,7 +445,7 @@ async function insertDummyData(config: DatabaseConfig) {
         try {
           console.log(`Inserting sale for product: ${sale.productName}`);
           await pool.query(
-            'INSERT INTO sales (id, productId, productName, quantity, price, total, date, customer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO sales (id, productId, productName, quantity, price, total, date, customer) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE productId=VALUES(productId), productName=VALUES(productName), quantity=VALUES(quantity), price=VALUES(price), total=VALUES(total), date=VALUES(date), customer=VALUES(customer)',
             [sale.id, sale.productId, sale.productName, sale.quantity, sale.price, sale.total, sale.date, sale.customer]
           );
           console.log(`Successfully inserted sale for product: ${sale.productName}`);

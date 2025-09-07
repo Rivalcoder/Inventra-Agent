@@ -34,7 +34,8 @@ const defaultConfigs = {
     options: {
       ssl: false,
       connectionLimit: 10,
-      charset: 'utf8mb4'
+      charset: 'utf8mb4',
+      includeDummyData: true
     }
   },
   mongodb: {
@@ -45,7 +46,8 @@ const defaultConfigs = {
     database: 'ai_inventory',
     options: {
       ssl: false,
-      connectionLimit: 10
+      connectionLimit: 10,
+      includeDummyData: true
     }
   },
   postgresql: {
@@ -56,7 +58,8 @@ const defaultConfigs = {
     database: 'ai_inventory',
     options: {
       ssl: false,
-      connectionLimit: 10
+      connectionLimit: 10,
+      includeDummyData: true
     }
   }
 };
@@ -249,6 +252,19 @@ export function DatabaseConfigComponent({ onConfigChange, onTestConnection, init
 
         {/* Advanced Options */}
         <div className="space-y-3">
+          {/* Include Dummy Data Toggle */}
+          <div className="flex items-center justify-between p-4 border border-white/20 rounded-lg bg-white/5">
+            <div>
+              <Label htmlFor="includeDummyData" className="text-white">Include sample data on first run</Label>
+              <p className="text-xs text-gray-400 mt-1">Seed products and sales if the database is empty</p>
+            </div>
+            <Switch
+              id="includeDummyData"
+              checked={config.options?.includeDummyData ?? true}
+              onCheckedChange={(checked) => handleConfigChange('options.includeDummyData', checked)}
+            />
+          </div>
+
           <Button
             variant="ghost"
             size="sm"

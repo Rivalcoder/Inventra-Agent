@@ -131,6 +131,22 @@ class DatabaseService {
   }
 
   private async connectMySQL(config: DatabaseConfig): Promise<mysql.Pool> {
+    // Debug: Log incoming MySQL credentials (password masked)
+    try {
+      const maskedPassword = typeof config.password === 'string'
+        ? (config.password.length > 0 ? `${config.password[0]}***(${config.password.length})` : '(empty)')
+        : '(unset)';
+      console.log('MySQL Config Debug:', {
+        host: config.host,
+        port: config.port,
+        username: config.username,
+        password: maskedPassword,
+        database: config.database
+      });
+    } catch (e) {
+      // ignore logging errors
+    }
+
     // First, create a pool without specifying database to check if we can connect
     const initialPool = mysql.createPool({
       host: config.host,

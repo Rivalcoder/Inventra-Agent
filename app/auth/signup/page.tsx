@@ -472,15 +472,7 @@ export default function SignUpPage() {
         };
         localStorage.setItem('userData', JSON.stringify(userData));
         
-        // Update the database config with the user's credentials and userId
-        const updatedConfig = { 
-          ...databaseConfig, 
-          username: formData.username,
-          password: formData.password,
-          userId: result.userId
-        } as DBConfig;
-        setDatabaseConfig(updatedConfig);
-        localStorage.setItem('databaseConfig', JSON.stringify(updatedConfig));
+        // Do not mix auth credentials into the DB config; DB config is managed from the left panel
         
         console.log('User account created with userId:', result.userId);
         console.log('User collections created:', result.userCollections);
@@ -992,7 +984,6 @@ export default function SignUpPage() {
                         value={formData.username}
                         onChange={(e) => {
                           handleInputChange('username', e.target.value);
-                          setDatabaseConfig(prev => ({ ...prev, username: e.target.value }));
                           // Debounce username check
                           clearTimeout((window as any).usernameCheckTimeout);
                           (window as any).usernameCheckTimeout = setTimeout(() => {
@@ -1047,7 +1038,6 @@ export default function SignUpPage() {
                         value={formData.password}
                         onChange={(e) => {
                           handleInputChange('password', e.target.value);
-                          setDatabaseConfig(prev => ({ ...prev, password: e.target.value }));
                         }}
                         className="pl-10 pr-10 bg-white/10 border-white/20 text-white placeholder-gray-400 h-12"
                       />
