@@ -55,9 +55,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [lowStockState, setLowStockState] = useState<Record<string, LowStockState>>({});
   const [settings, setSettings] = useState<any>(null);
 
-  // Load settings on mount
+  // Load settings on mount only if user is authenticated
   useEffect(() => {
     const loadSettings = async () => {
+      // Check if user is authenticated before making API calls
+      const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
+      if (!isAuthenticated) {
+        return;
+      }
+      
       try {
         const allSettings = await getSettings();
         const settingsObj = allSettings.reduce((acc: any, setting) => {

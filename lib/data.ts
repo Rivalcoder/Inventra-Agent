@@ -6,7 +6,7 @@ import {
   TopProduct,
   Settings
 } from '@/lib/types';
-import { getApiBase } from './utils';
+import { getApiBase, normalizeDate } from './utils';
 import { ApiClient } from './utils/api-client';
 
 // Helper function to fetch data from API
@@ -69,7 +69,8 @@ export async function getSales(): Promise<Sale[]> {
     ...item,
     quantity: Number(item.quantity) || 0,
     price: Number(item.price) || 0,
-    total: Number(item.total) || 0
+    total: Number(item.total) || 0,
+    date: normalizeDate(item.date) // Ensure date is always present and valid
   }));
 }
 
@@ -128,7 +129,8 @@ export async function getRecentSales(): Promise<Sale[]> {
     ...item,
     price: Number(item.price) || 0,
     total: Number(item.total) || 0,
-    quantity: Number(item.quantity) || 0
+    quantity: Number(item.quantity) || 0,
+    date: normalizeDate(item.date) // Ensure date is always present and valid
   }));
 }
 

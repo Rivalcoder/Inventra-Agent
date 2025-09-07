@@ -18,6 +18,33 @@ function formatDateForMySQL(date: string | Date): string {
   return d.toISOString().slice(0, 19).replace('T', ' ');
 }
 
+// Helper function to get user ID from request
+function getUserIdFromRequest(request: Request): string | null {
+  try {
+    // Try to get userId from request headers
+    const userId = request.headers.get('x-user-id');
+    if (userId) return userId;
+    
+    // Try to get from user config
+    const userConfig = request.headers.get('x-user-db-config');
+    if (userConfig) {
+      const config = JSON.parse(userConfig);
+      return config.userId || null;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error getting userId from request:', error);
+    return null;
+  }
+}
+
+// Helper function to get collection name (now returns base collection name)
+function getUserCollectionName(baseCollection: string, request: Request): string {
+  // Always return the base collection name since we now use userId field for isolation
+  return baseCollection;
+}
+
 // Get database configuration from request or user's stored config
 async function getDatabaseConfig(request: Request): Promise<DatabaseConfig> {
   try {
@@ -26,18 +53,54 @@ async function getDatabaseConfig(request: Request): Promise<DatabaseConfig> {
     const configParam = url.searchParams.get('config');
     
     if (configParam) {
-      return JSON.parse(configParam);
+      const config = JSON.parse(configParam);
+      // Check for corrupted configurations
+      if (config.host && (config.host.includes('gmail.com') || config.host.includes('yahoo.com') || config.host.includes('hotmail.com'))) {
+        throw new Error(`Corrupted database configuration detected. Host contains invalid domain: ${config.host}. Please clear your configuration and try again.`);
+      }
+      if (config.password && (config.password.includes('gmail.com') || config.password.includes('yahoo.com') || config.password.includes('hotmail.com'))) {
+        throw new Error(`Corrupted database configuration detected. Password contains invalid domain: ${config.password}. Please clear your configuration and try again.`);
+      }
+      return config;
     }
     
     // Check for user's database configuration in request headers
     const userConfig = request.headers.get('x-user-db-config');
     if (userConfig) {
-      return JSON.parse(userConfig);
+      const config = JSON.parse(userConfig);
+      // Check for corrupted configurations
+      if (config.host && (config.host.includes('gmail.com') || config.host.includes('yahoo.com') || config.host.includes('hotmail.com'))) {
+        throw new Error(`Corrupted database configuration detected. Host contains invalid domain: ${config.host}. Please clear your configuration and try again.`);
+      }
+      if (config.password && (config.password.includes('gmail.com') || config.password.includes('yahoo.com') || config.password.includes('hotmail.com'))) {
+        throw new Error(`Corrupted database configuration detected. Password contains invalid domain: ${config.password}. Please clear your configuration and try again.`);
+      }
+      return config;
     }
     
-    // For development, provide a default MySQL configuration
+    // For development, provide a default configuration
     if (process.env.NODE_ENV === 'development') {
       console.log('Using default development database configuration');
+      
+      // Check if we have MongoDB Atlas credentials
+      if (process.env.DB_USERNAME && process.env.DB_PASSWORD && process.env.DB_HOST) {
+        console.log('Using MongoDB Atlas configuration from environment variables');
+        return {
+          type: 'mongodb',
+          host: process.env.DB_HOST, // cluster0.jxiaye0.mongodb.net
+          port: 27017,
+          username: process.env.DB_USERNAME, // inventra
+          password: process.env.DB_PASSWORD, // inventra2006
+          database: process.env.MONGODB_DATABASE || 'ai_inventory',
+          options: {
+            ssl: true,
+            connectionLimit: 10,
+            charset: 'utf8'
+          }
+        };
+      }
+      
+      // Fallback to MySQL
       return {
         type: 'mysql',
         host: 'localhost',
@@ -268,18 +331,24 @@ async function insertDummyData(config: DatabaseConfig) {
           await db.collection('products').insertOne(product);
           insertedProductIds.add(product.id);
           console.log(`Successfully inserted product: ${product.name}`);
-        } catch (error) {
+        } catch (error: any) {
+          // Handle duplicate key errors gracefully
+          if (error.code === 11000) {
+            console.log(`Product ${product.name} already exists, skipping...`);
+            insertedProductIds.add(product.id);
+            continue;
+          }
           console.error(`Error inserting product ${product.name}:`, error);
           throw error;
         }
       }
 
-      // Verify all products were inserted
+      // Verify all products exist (either newly inserted or already present)
       console.log('Verifying product insertions...');
       const count = await db.collection('products').countDocuments();
       console.log(`Found ${count} products in database, expected ${dummyProducts.length}`);
       
-      if (count !== dummyProducts.length) {
+      if (count < dummyProducts.length) {
         const existingProducts = await db.collection('products').find({}, { projection: { id: 1, name: 1 } }).toArray();
         console.log('Products in database:', existingProducts);
         console.log('Expected product IDs:', dummyProducts.map(p => ({ id: p.id, name: p.name })));
@@ -453,35 +522,18 @@ export async function GET(request: Request) {
           return NextResponse.json(stats);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const salesResult = await db.collection('sales').aggregate([
-            {
-              $group: {
-                _id: null,
-                totalSales: { $sum: 1 },
-                totalQuantity: { $sum: '$quantity' },
-                totalRevenue: { $sum: '$total' }
-              }
-            }
-          ]).toArray();
-          
-          const productsResult = await db.collection('products').aggregate([
-            {
-              $group: {
-                _id: null,
-                totalProducts: { $sum: 1 },
-                totalStock: { $sum: '$stock' },
-                totalValue: { $sum: { $multiply: ['$price', '$stock'] } }
-              }
-            }
-          ]).toArray();
-          
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json({ totalSales: 0, totalQuantity: 0, totalRevenue: 0, totalProducts: 0, totalStock: 0, totalValue: 0 });
+          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.products': 1, 'data.sales': 1 } });
+          const products = Array.isArray(user?.data?.products) ? user.data.products : [];
+          const sales = Array.isArray(user?.data?.sales) ? user.data.sales : [];
           const stats = {
-            totalSales: Number(salesResult[0]?.totalSales) || 0,
-            totalQuantity: Number(salesResult[0]?.totalQuantity) || 0,
-            totalRevenue: Number(salesResult[0]?.totalRevenue) || 0,
-            totalProducts: Number(productsResult[0]?.totalProducts) || 0,
-            totalStock: Number(productsResult[0]?.totalStock) || 0,
-            totalValue: Number(productsResult[0]?.totalValue) || 0
+            totalSales: sales.length,
+            totalQuantity: sales.reduce((sum: number, s: any) => sum + (Number(s.quantity) || 0), 0),
+            totalRevenue: sales.reduce((sum: number, s: any) => sum + (Number(s.total) || ((Number(s.price) || 0) * (Number(s.quantity) || 0))), 0),
+            totalProducts: products.length,
+            totalStock: products.reduce((sum: number, p: any) => sum + (Number(p.stock) || 0), 0),
+            totalValue: products.reduce((sum: number, p: any) => sum + ((Number(p.price) || 0) * (Number(p.stock) || 0)), 0)
           };
           console.log('Stats calculated:', stats);
           return NextResponse.json(stats);
@@ -532,40 +584,26 @@ export async function GET(request: Request) {
           return NextResponse.json(salesByPeriod);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const salesByPeriod = await db.collection('sales').aggregate([
-            {
-              $match: {
-                date: { $gte: new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000) }
-              }
-            },
-            {
-              $group: {
-                _id: {
-                  year: { $year: '$date' },
-                  month: { $month: '$date' }
-                },
-                revenue: { $sum: '$total' },
-                quantity: { $sum: '$quantity' }
-              }
-            },
-            {
-              $project: {
-                month: {
-                  $concat: [
-                    { $toString: '$_id.year' },
-                    '-',
-                    { $cond: { if: { $lt: ['$_id.month', 10] }, then: '0', else: '' } },
-                    { $toString: '$_id.month' }
-                  ]
-                },
-                revenue: 1,
-                quantity: 1
-              }
-            },
-            { $sort: { month: 1 } }
-          ]).toArray();
-          console.log(`Found ${salesByPeriod.length} months of sales data`);
-          return NextResponse.json(salesByPeriod);
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json([]);
+          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.sales': 1 } });
+          const sales = Array.isArray(user?.data?.sales) ? user.data.sales : [];
+          const since = Date.now() - 6 * 30 * 24 * 60 * 60 * 1000;
+          const buckets = new Map<string, { month: string; revenue: number; quantity: number }>();
+          for (const s of sales) {
+            const d = new Date(s.date || s.saleDate);
+            if (isNaN(d.getTime()) || d.getTime() < since) continue;
+            const y = d.getUTCFullYear();
+            const m = (d.getUTCMonth() + 1).toString().padStart(2, '0');
+            const key = `${y}-${m}`;
+            const bucket = buckets.get(key) || { month: key, revenue: 0, quantity: 0 };
+            bucket.quantity += Number(s.quantity) || 0;
+            bucket.revenue += Number(s.total) || ((Number(s.price) || 0) * (Number(s.quantity) || 0));
+            buckets.set(key, bucket);
+          }
+          const result = Array.from(buckets.values()).sort((a, b) => a.month.localeCompare(b.month));
+          console.log(`Found ${result.length} months of sales data`);
+          return NextResponse.json(result);
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;
           const salesByPeriod = await pool.query(`
@@ -595,21 +633,16 @@ export async function GET(request: Request) {
           return NextResponse.json(lowStockProducts);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const lowStockProducts = await db.collection('products').aggregate([
-            {
-              $match: { $expr: { $lte: ['$stock', '$minStock'] } }
-            },
-            {
-              $addFields: {
-                stockRatio: { $divide: ['$stock', '$minStock'] }
-              }
-            },
-            {
-              $sort: { stockRatio: 1 }
-            }
-          ]).toArray();
-          console.log(`Found ${lowStockProducts.length} low stock products`);
-          return NextResponse.json(lowStockProducts);
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json([]);
+          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.products': 1 } });
+          const products = Array.isArray(user?.data?.products) ? user.data.products : [];
+          const lowStock = products
+            .filter((p: any) => (Number(p.stock) || 0) <= (Number(p.minStock) || 0))
+            .map((p: any) => ({ ...p, stockRatio: (Number(p.minStock) || 0) === 0 ? Infinity : (Number(p.stock) || 0) / (Number(p.minStock) || 0) }))
+            .sort((a: any, b: any) => (a.stockRatio as number) - (b.stockRatio as number));
+          console.log(`Found ${lowStock.length} low stock products`);
+          return NextResponse.json(lowStock);
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;
           const lowStockProducts = await pool.query(`
@@ -640,26 +673,26 @@ export async function GET(request: Request) {
           return NextResponse.json(topProducts);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const topProducts = await db.collection('products').aggregate([
-            {
-              $lookup: {
-                from: 'sales',
-                localField: 'id',
-                foreignField: 'productId',
-                as: 'sales'
-              }
-            },
-            {
-              $addFields: {
-                sales: { $size: '$sales' },
-                revenue: { $sum: '$sales.total' }
-              }
-            },
-            { $sort: { revenue: -1 } },
-            { $limit: 5 }
-          ]).toArray();
-          console.log(`Found ${topProducts.length} top products`);
-          return NextResponse.json(topProducts);
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json([]);
+          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.products': 1, 'data.sales': 1 } });
+          const products = Array.isArray(user?.data?.products) ? user.data.products : [];
+          const sales = Array.isArray(user?.data?.sales) ? user.data.sales : [];
+          const revenueByProduct = new Map<string, { revenue: number; sales: number }>();
+          for (const s of sales) {
+            const entry = revenueByProduct.get(s.productId) || { revenue: 0, sales: 0 };
+            entry.sales += 1;
+            entry.revenue += Number(s.total) || ((Number(s.price) || 0) * (Number(s.quantity) || 0));
+            revenueByProduct.set(s.productId, entry);
+          }
+          const enriched = products.map((p: any) => {
+            const agg = revenueByProduct.get(p.id) || { revenue: 0, sales: 0 };
+            return { ...p, revenue: agg.revenue, sales: agg.sales };
+          })
+          .sort((a: any, b: any) => (Number(b.revenue) || 0) - (Number(a.revenue) || 0))
+          .slice(0, 5);
+          console.log(`Found ${enriched.length} top products`);
+          return NextResponse.json(enriched);
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;
           const topProducts = await pool.query(`
@@ -690,13 +723,16 @@ export async function GET(request: Request) {
           return NextResponse.json(recentSales);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const recentSales = await db.collection('sales')
-            .find({})
-            .sort({ date: -1 })
-            .limit(5)
-            .toArray();
-          console.log(`Found ${recentSales.length} recent sales`);
-          return NextResponse.json(recentSales);
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json([]);
+          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.sales': 1 } });
+          const sales = Array.isArray(user?.data?.sales) ? user.data.sales : [];
+          const recent = sales
+            .slice()
+            .sort((a: any, b: any) => new Date(b.date || b.saleDate).getTime() - new Date(a.date || a.saleDate).getTime())
+            .slice(0, 5);
+          console.log(`Found ${recent.length} recent sales for user: ${userId}`);
+          return NextResponse.json(recent);
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;
           const recentSales = await pool.query(`
@@ -717,8 +753,11 @@ export async function GET(request: Request) {
           return NextResponse.json(products);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const products = await db.collection('products').find({}).toArray();
-          console.log(`Found ${products.length} products`);
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json([]);
+          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.products': 1 } });
+          const products = Array.isArray(user?.data?.products) ? user.data.products : [];
+          console.log(`Found ${products.length} products for user: ${userId}`);
           return NextResponse.json(products);
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;
@@ -747,8 +786,11 @@ export async function GET(request: Request) {
           return NextResponse.json(sales);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const sales = await db.collection('sales').find({}).toArray();
-          console.log(`Found ${sales.length} sales`);
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json([]);
+          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.sales': 1 } });
+          const sales = Array.isArray(user?.data?.sales) ? user.data.sales : [];
+          console.log(`Found ${sales.length} sales for user: ${userId}`);
           return NextResponse.json(sales);
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;
@@ -780,8 +822,12 @@ export async function GET(request: Request) {
           return NextResponse.json(product[0] || null);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const product = await db.collection('products').findOne({ id });
-          return NextResponse.json(product || null);
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json(null);
+          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.products': 1 } });
+          const products = Array.isArray(user?.data?.products) ? user.data.products : [];
+          const product = products.find((p: any) => p.id === id) || null;
+          return NextResponse.json(product);
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;
           const product = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
@@ -797,9 +843,13 @@ export async function GET(request: Request) {
           return NextResponse.json(settings);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const settings = await db.collection('settings').find({}).toArray();
-          console.log(`Found ${settings.length} settings`);
-          return NextResponse.json(settings);
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json([]);
+          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.settings': 1 } });
+          const settingsObj = user?.data?.settings || {};
+          const settingsArr = Object.keys(settingsObj).map((k) => settingsObj[k]);
+          console.log(`Found ${settingsArr.length} settings in user document for user: ${userId}`);
+          return NextResponse.json(settingsArr);
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;
           const settings = await pool.query('SELECT * FROM settings');
@@ -819,8 +869,11 @@ export async function GET(request: Request) {
           return NextResponse.json(setting[0] || null);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const setting = await db.collection('settings').findOne({ setting_key: settingKey });
-          return NextResponse.json(setting || null);
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json(null);
+          const user = await db.collection('users').findOne({ userId }, { projection: { [`data.settings.${settingKey}`]: 1 } });
+          const setting = (user as any)?.data?.settings?.[settingKey] || null;
+          return NextResponse.json(setting);
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;
           const setting = await pool.query('SELECT * FROM settings WHERE setting_key = $1', [settingKey]);
@@ -850,14 +903,15 @@ export async function GET(request: Request) {
           });
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const exportedProducts = await db.collection('products').find({}).toArray();
-          const exportedSales = await db.collection('sales').find({}).toArray();
-          const exportedSettings = await db.collection('settings').find({}).toArray();
-
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json({ products: [], sales: [], settings: [], exportDate: new Date().toISOString(), version: '1.0' });
+          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.products': 1, 'data.sales': 1, 'data.settings': 1 } });
+          const settingsObj = user?.data?.settings || {};
+          const settingsArr = Object.keys(settingsObj).map((k) => settingsObj[k]);
           return NextResponse.json({
-            products: exportedProducts,
-            sales: exportedSales,
-            settings: exportedSettings,
+            products: Array.isArray(user?.data?.products) ? user!.data.products : [],
+            sales: Array.isArray(user?.data?.sales) ? user!.data.sales : [],
+            settings: settingsArr,
             exportDate: new Date().toISOString(),
             version: '1.0'
           });
@@ -917,14 +971,13 @@ export async function GET(request: Request) {
           }
         } else if (config.type === 'mongodb') {
           const db = connection.connection as Db;
-          
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
           try {
-            // Clear existing inventory data
-            await db.collection('products').deleteMany({});
-            
-            // Insert new inventory data
-            await db.collection('products').insertMany(inventoryData);
-            
+            await db.collection('users').updateOne(
+              { userId },
+              { $set: { 'data.products': inventoryData } }
+            );
             return NextResponse.json({ success: true, message: 'Inventory data imported successfully' });
           } catch (error) {
             throw error;
@@ -1006,14 +1059,13 @@ export async function GET(request: Request) {
           }
         } else if (config.type === 'mongodb') {
           const db = connection.connection as Db;
-          
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
           try {
-            // Clear existing sales data
-            await db.collection('sales').deleteMany({});
-            
-            // Insert new sales data
-            await db.collection('sales').insertMany(salesData);
-            
+            await db.collection('users').updateOne(
+              { userId },
+              { $set: { 'data.sales': salesData } }
+            );
             return NextResponse.json({ success: true, message: 'Sales data imported successfully' });
           } catch (error) {
             throw error;
@@ -1227,9 +1279,16 @@ export async function POST(request: Request) {
           return NextResponse.json({ success: true, result });
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const result = await db.collection('products').updateOne(
-            { id },
-            { $set: updateFields }
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
+          const setDoc: Record<string, any> = {};
+          for (const [k, v] of Object.entries(updateFields)) {
+            setDoc[`data.products.$[p].${k}`] = v;
+          }
+          const result = await db.collection('users').updateOne(
+            { userId },
+            { $set: setDoc },
+            { arrayFilters: [{ 'p.id': id }] }
           );
           return NextResponse.json({ success: true, result });
         } else if (config.type === 'postgresql') {
@@ -1279,20 +1338,20 @@ export async function POST(request: Request) {
           return NextResponse.json(result[0] || null);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          
-          const result = await db.collection('settings').findOneAndUpdate(
-            { setting_key: settingData.setting_key },
-            {
-              $set: {
-                ...settingData,
-                id: settingData.id || crypto.randomUUID(),
-                updatedAt: new Date().toISOString()
-              }
-            },
-            { upsert: true, returnDocument: 'after' }
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
+          const key = settingData.setting_key;
+          const setting = {
+            ...settingData,
+            id: settingData.id || crypto.randomUUID(),
+            updatedAt: new Date().toISOString()
+          };
+          await db.collection('users').updateOne(
+            { userId },
+            { $set: { [`data.settings.${key}`]: setting } }
           );
-          
-          return NextResponse.json(result.value);
+          const user = await db.collection('users').findOne({ userId }, { projection: { [`data.settings.${key}`]: 1 } });
+          return NextResponse.json(user?.data?.settings?.[key] || setting);
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;
           
@@ -1353,19 +1412,20 @@ export async function POST(request: Request) {
           return NextResponse.json(result[0] || null);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          
-          const result = await db.collection('settings').findOneAndUpdate(
-            { setting_key: settingData.setting_key },
-            {
-              $set: {
-                ...settingData,
-                updatedAt: new Date().toISOString()
-              }
-            },
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
+          const key = settingData.setting_key;
+          const update = {
+            ...settingData,
+            updatedAt: new Date().toISOString()
+          };
+          const result = await db.collection('users').findOneAndUpdate(
+            { userId },
+            { $set: { [`data.settings.${key}`]: update } },
             { returnDocument: 'after' }
           );
-          
-          return NextResponse.json(result.value || null);
+          const value = result.value?.data?.settings?.[key] || null;
+          return NextResponse.json(value);
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;
           
@@ -1398,7 +1458,12 @@ export async function POST(request: Request) {
           await pool.query('DELETE FROM settings WHERE setting_key = ?', [setting_key]);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          await db.collection('settings').deleteOne({ setting_key });
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
+          await db.collection('users').updateOne(
+            { userId },
+            { $unset: { [`data.settings.${setting_key}`]: '' } }
+          );
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;
           await pool.query('DELETE FROM settings WHERE setting_key = $1', [setting_key]);
@@ -1429,13 +1494,19 @@ export async function POST(request: Request) {
           return NextResponse.json(result[0]);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
           const product = {
             id: productId,
+            userId: userId,
             ...productData,
             createdAt: now,
             updatedAt: now
           };
-          await db.collection('products').insertOne(product);
+          await db.collection('users').updateOne(
+            { userId },
+            { $push: { 'data.products': product } }
+          );
           return NextResponse.json(product);
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;
@@ -1472,12 +1543,18 @@ export async function POST(request: Request) {
           return NextResponse.json(result[0]);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
           const sale = {
             id: saleId,
+            userId: userId,
             ...saleData,
             date: saleData.date || now
           };
-          await db.collection('sales').insertOne(sale);
+          await db.collection('users').updateOne(
+            { userId },
+            { $push: { 'data.sales': sale } }
+          );
           return NextResponse.json(sale);
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;

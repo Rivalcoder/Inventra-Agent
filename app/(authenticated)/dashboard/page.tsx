@@ -60,6 +60,30 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
+    // Clear any corrupted database configurations on dashboard load
+    const currentDbConfig = localStorage.getItem('databaseConfig');
+    if (currentDbConfig) {
+      try {
+        const parsed = JSON.parse(currentDbConfig);
+        // Check if the config has a corrupted host (like gmail.com)
+        if (parsed.host && parsed.host.includes('gmail.com')) {
+          console.log('Detected corrupted database config on dashboard, clearing...');
+          localStorage.removeItem('databaseConfig');
+          localStorage.removeItem('default_db_config');
+          // Redirect to signup to reconfigure
+          window.location.href = '/auth/signup';
+          return;
+        }
+      } catch (error) {
+        console.log('Corrupted database config detected on dashboard, clearing...');
+        localStorage.removeItem('databaseConfig');
+        localStorage.removeItem('default_db_config');
+        // Redirect to signup to reconfigure
+        window.location.href = '/auth/signup';
+        return;
+      }
+    }
+
     async function loadData() {
       try {
         setLoading(true);

@@ -22,7 +22,8 @@ import {
   Shield,
   Zap,
   CheckCircle2,
-  ArrowRight
+  ArrowRight,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,6 +32,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
 import { airtableService } from '@/lib/services/airtable';
 import { configService } from '@/lib/services/config';
 import { DatabaseConfigComponent } from '@/components/auth/database-config';
@@ -123,6 +125,10 @@ export default function SignUpPage() {
   const [cloudTestLoading, setCloudTestLoading] = useState(false);
   const [cloudTestMessage, setCloudTestMessage] = useState('');
   const [cloudTestSuccess, setCloudTestSuccess] = useState<boolean | null>(null);
+  const [usernameCheckLoading, setUsernameCheckLoading] = useState(false);
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+  const [usernameMessage, setUsernameMessage] = useState('');
+  const [includeDummyData, setIncludeDummyData] = useState(true);
   const [databaseConfig, setDatabaseConfig] = useState<DBConfig>({
     type: 'mysql',
     host: 'localhost',
@@ -147,6 +153,94 @@ export default function SignUpPage() {
   // Initialize client-side state and auth mode
   useEffect(() => {
     setIsClient(true);
+    
+    // AGGRESSIVE CORRUPTION DETECTION: Check for any corrupted data
+    let hasCorruption = false;
+    
+    // Check all localStorage items for corruption
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key) {
+        try {
+          const value = localStorage.getItem(key);
+          if (value && typeof value === 'string') {
+            // Check if it's JSON and contains corrupted data
+            if (value.includes('gmail.com') || value.includes('yahoo.com') || value.includes('hotmail.com')) {
+              console.log(`Detected corrupted data in ${key}:`, value);
+              hasCorruption = true;
+              break;
+            }
+            
+            // Try to parse as JSON and check for corruption
+            try {
+              const parsed = JSON.parse(value);
+              if (parsed && typeof parsed === 'object') {
+                // Check all string values in the object
+                const checkForCorruption = (obj: any): boolean => {
+                  for (const [k, v] of Object.entries(obj)) {
+                    if (typeof v === 'string' && (v.includes('gmail.com') || v.includes('yahoo.com') || v.includes('hotmail.com'))) {
+                      console.log(`Detected corrupted field ${k} in ${key}:`, v);
+                      return true;
+                    }
+                    if (typeof v === 'object' && v !== null) {
+                      if (checkForCorruption(v)) return true;
+                    }
+                  }
+                  return false;
+                };
+                
+                if (checkForCorruption(parsed)) {
+                  hasCorruption = true;
+                  break;
+                }
+              }
+            } catch (e) {
+              // Not JSON, continue
+            }
+          }
+        } catch (error) {
+          console.log(`Error checking ${key}:`, error);
+        }
+      }
+    }
+    
+    // If corruption detected, clear everything
+    if (hasCorruption) {
+      console.log('CORRUPTION DETECTED! Clearing all localStorage data...');
+      localStorage.clear();
+      
+      // Set up clean configuration
+      const cleanConfig = {
+        type: 'mongodb',
+        host: 'cluster0.jxiaye0.mongodb.net',
+        port: 27017,
+        username: '',
+        password: '',
+        database: 'ai_inventory',
+        options: {
+          ssl: true,
+          connectionLimit: 50,
+          charset: 'utf8',
+        },
+      };
+      localStorage.setItem('databaseConfig', JSON.stringify(cleanConfig));
+      
+      const adminConfig = {
+        type: 'mongodb',
+        host: 'cluster0.jxiaye0.mongodb.net',
+        port: 27017,
+        username: 'inventra',
+        password: 'inventra2006',
+        database: 'ai_inventory',
+        options: {
+          ssl: true,
+          connectionLimit: 50,
+          charset: 'utf8',
+        },
+      };
+      localStorage.setItem('admin_db_config', JSON.stringify(adminConfig));
+    }
+    
     const savedAuthMode = configService.getAuthMode();
     const savedDemoMode = configService.isDemoMode();
     setAuthMode(savedAuthMode);
@@ -176,19 +270,45 @@ export default function SignUpPage() {
   // Set DB defaults based on mode (Local -> MySQL, Cloud -> MongoDB)
   useEffect(() => {
     if (authMode === 'airtable') {
-      setDatabaseConfig({
+      // Clear any old/corrupted database configuration
+      localStorage.removeItem('databaseConfig');
+      localStorage.removeItem('default_db_config');
+      
+      // Use environment variables for MongoDB Atlas configuration
+      const newConfig = {
         type: 'mongodb',
-        host: 'cluster0.mongodb.net',
+        host: process.env.NEXT_PUBLIC_MONGODB_CLUSTER_URL || 'cluster0.jxiaye0.mongodb.net',
         port: 27017,
-        username: 'admin',
-        password: '',
+        username: '', // Will be filled by user
+        password: '', // Will be filled by user
+        database: process.env.NEXT_PUBLIC_MONGODB_DATABASE || 'ai_inventory',
+        options: {
+          ssl: true,
+          connectionLimit: 50,
+          charset: 'utf8',
+        },
+      } as DBConfig;
+      
+      setDatabaseConfig(newConfig);
+      
+      // Store the correct configuration in localStorage
+      localStorage.setItem('databaseConfig', JSON.stringify(newConfig));
+      
+      // Also store admin credentials for testing (these will be used by the API)
+      const adminConfig = {
+        type: 'mongodb',
+        host: 'cluster0.jxiaye0.mongodb.net',
+        port: 27017,
+        username: 'inventra', // Admin username from environment
+        password: 'inventra2006', // Admin password from environment
         database: 'ai_inventory',
         options: {
           ssl: true,
           connectionLimit: 50,
           charset: 'utf8',
         },
-      } as DBConfig);
+      };
+      localStorage.setItem('admin_db_config', JSON.stringify(adminConfig));
     } else {
       setDatabaseConfig({
         type: 'mysql',
@@ -234,6 +354,195 @@ export default function SignUpPage() {
       console.error('Connection test failed:', error);
       return false;
     }
+  };
+
+  const handleCheckUsername = async (username: string) => {
+    if (!username.trim()) {
+      setUsernameMessage('');
+      setUsernameAvailable(null);
+      return;
+    }
+
+    // Basic validation
+    if (username.length < 3) {
+      setUsernameMessage('❌ Username must be at least 3 characters');
+      setUsernameAvailable(false);
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      setUsernameMessage('❌ Username can only contain letters, numbers, and underscores');
+      setUsernameAvailable(false);
+      return;
+    }
+
+    setUsernameCheckLoading(true);
+    setUsernameMessage('');
+    setUsernameAvailable(null);
+
+    try {
+      setUsernameMessage('Checking username availability...');
+      
+      const response = await fetch('/api/db/check-username', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          username,
+          clusterUrl: databaseConfig.host,
+          database: databaseConfig.database
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        setUsernameAvailable(false);
+        setUsernameMessage(`❌ ${result.message || 'Failed to check username availability'}`);
+      } else {
+        if (result.available) {
+          setUsernameMessage('✅ Username is available! You can create an account with this username.');
+          setUsernameAvailable(true);
+        } else {
+          setUsernameMessage('❌ Username is already taken. Please choose a different username.');
+          setUsernameAvailable(false);
+        }
+      }
+    } catch (error) {
+      console.error('Username check failed:', error);
+      setUsernameAvailable(false);
+      setUsernameMessage('❌ Network error. Please check your connection and try again.');
+    } finally {
+      setUsernameCheckLoading(false);
+    }
+  };
+
+  const handleCreateCluster = async () => {
+    setCloudTestLoading(true);
+    setCloudTestMessage('');
+    setCloudTestSuccess(null);
+
+    try {
+      // First check if username is available
+      if (!formData.username.trim()) {
+        setCloudTestSuccess(false);
+        setCloudTestMessage('Please enter a username first');
+        return;
+      }
+
+      if (!formData.password.trim()) {
+        setCloudTestSuccess(false);
+        setCloudTestMessage('Please enter a password first');
+        return;
+      }
+
+      setCloudTestMessage('Creating your account in the cluster...');
+
+      const response = await fetch('/api/db/create-cluster', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: formData.username,
+          password: formData.password,
+          database: databaseConfig.database,
+          includeDummyData: includeDummyData
+        }),
+      });
+
+      const result = await response.json();
+      setCloudTestSuccess(result.success);
+      
+      if (result.success) {
+        setCloudTestMessage('✅ Account created successfully! You can now sign in.');
+        
+        // Store user data with userId
+        const userData = {
+          userId: result.userId,
+          username: formData.username,
+          email: formData.email,
+          createdAt: new Date().toISOString()
+        };
+        localStorage.setItem('userData', JSON.stringify(userData));
+        
+        // Update the database config with the user's credentials and userId
+        const updatedConfig = { 
+          ...databaseConfig, 
+          username: formData.username,
+          password: formData.password,
+          userId: result.userId
+        } as DBConfig;
+        setDatabaseConfig(updatedConfig);
+        localStorage.setItem('databaseConfig', JSON.stringify(updatedConfig));
+        
+        console.log('User account created with userId:', result.userId);
+        console.log('User collections created:', result.userCollections);
+      } else {
+        setCloudTestMessage(`❌ ${result.message || 'Failed to create account. Please try again.'}`);
+      }
+    } catch (error) {
+      console.error('Cluster creation failed:', error);
+      setCloudTestSuccess(false);
+      setCloudTestMessage('❌ Network error. Please check your connection and try again.');
+    } finally {
+      setCloudTestLoading(false);
+    }
+  };
+
+  const handleClearConfiguration = () => {
+    // NUCLEAR OPTION: Clear ALL localStorage data
+    localStorage.clear();
+    
+    // Reset form state
+    setFormData({
+      username: '',
+      email: '',
+      password: '',
+      confirmPassword: ''
+    });
+    
+    // Reset database config with correct values
+    const cleanConfig: DBConfig = {
+      type: 'mongodb',
+      host: 'cluster0.jxiaye0.mongodb.net',
+      port: 27017,
+      username: '',
+      password: '',
+      database: 'ai_inventory',
+      options: {
+        ssl: true,
+        connectionLimit: 50,
+        charset: 'utf8',
+      },
+    };
+    
+    setDatabaseConfig(cleanConfig);
+    
+    // Store the clean configuration
+    localStorage.setItem('databaseConfig', JSON.stringify(cleanConfig));
+    
+    // Store admin credentials for testing (these will be used by the API)
+    const adminConfig = {
+      type: 'mongodb',
+      host: 'cluster0.jxiaye0.mongodb.net',
+      port: 27017,
+      username: 'inventra', // Admin username from environment
+      password: 'inventra2006', // Admin password from environment
+      database: 'ai_inventory',
+      options: {
+        ssl: true,
+        connectionLimit: 50,
+        charset: 'utf8',
+      },
+    };
+    localStorage.setItem('admin_db_config', JSON.stringify(adminConfig));
+    
+    // Reset auth mode
+    setAuthMode('airtable');
+    
+    alert('ALL DATA CLEARED! All corrupted configurations have been removed. Please refresh the page and try again.');
   };
 
   const validateStep1 = () => {
@@ -300,10 +609,44 @@ export default function SignUpPage() {
       };
 
       let success = false;
+      let userId = null;
 
       if (authMode === 'airtable') {
-        // Create user in Airtable
-        success = await airtableService.createUser(userData);
+        // For cloud mode, create user in MongoDB cluster with unique collections
+        try {
+          const response = await fetch('/api/db/create-cluster', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              username: formData.username,
+              password: formData.password,
+              database: databaseConfig.database,
+              includeDummyData: includeDummyData
+            }),
+          });
+
+          const result = await response.json();
+          success = result.success;
+          userId = result.userId;
+
+          if (success) {
+            // Update userData with the userId from MongoDB
+            (userData as any).userId = userId;
+            (userData.databaseConfig as any).userId = userId;
+            
+            console.log('User account created in MongoDB with userId:', userId);
+            console.log('User collections created:', result.userCollections);
+          } else {
+            setError(result.message || 'Failed to create account in cloud database.');
+            return;
+          }
+        } catch (error) {
+          console.error('MongoDB cluster creation failed:', error);
+          setError('Failed to create account in cloud database. Please try again.');
+          return;
+        }
       } else {
         // Create user in local storage
         if (!localService) throw new Error('Local service unavailable on server');
@@ -361,6 +704,14 @@ export default function SignUpPage() {
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back
+            </Button>
+            
+            <Button
+              variant="ghost"
+              onClick={handleClearConfiguration}
+              className="absolute top-6 right-6 text-white hover:text-red-400 text-sm"
+            >
+              Clear Config
             </Button>
             
             <div className="flex items-center justify-center space-x-2 mb-2">
@@ -505,26 +856,104 @@ export default function SignUpPage() {
                           <div className="text-white font-medium mb-2">Cloud Database</div>
                           <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                             <Globe className="w-4 h-4 text-emerald-400" />
-                            <span className="text-emerald-300">MongoDB (recommended)</span>
+                            <span className="text-emerald-300">MongoDB Atlas (recommended)</span>
                           </div>
                         </div>
-                        <div>
-                          <Label className="text-white">Cluster</Label>
-                          <div className="mt-2 text-gray-300">cluster0.mongodb.net</div>
+                        
+                        <div className="col-span-1 sm:col-span-2">
+                          <Label className="text-white">MongoDB Cluster URL</Label>
+                          <div className="mt-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle className="w-4 h-4 text-emerald-400" />
+                              <span className="text-emerald-300 font-mono text-sm">
+                                {databaseConfig.host}
+                              </span>
+                            </div>
+                          </div>
+                          <p className="text-xs text-gray-400 mt-1">Pre-configured cluster URL from environment</p>
                         </div>
-                        <div>
+                        
+                        
+                        <div className="col-span-1 sm:col-span-2">
                           <Label className="text-white">Database Name</Label>
-                          <div className="mt-2 text-gray-300">ai_inventory</div>
+                          <div className="mt-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle className="w-4 h-4 text-emerald-400" />
+                              <span className="text-emerald-300 font-mono text-sm">
+                                {databaseConfig.database}
+                              </span>
+                            </div>
+                          </div>
+                          <p className="text-xs text-gray-400 mt-1">Pre-configured database name</p>
                         </div>
                       </div>
-                      <div className="text-xs text-gray-400">We auto-configured recommended MongoDB settings for cloud. Use Test Connection to verify access.</div>
-                      <div className="flex items-center gap-3">
-                        <Button onClick={async () => { setCloudTestMessage(''); setCloudTestSuccess(null); setCloudTestLoading(true); const ok = await handleTestConnection(databaseConfig); setCloudTestSuccess(ok); setCloudTestMessage(ok ? 'Connection successful.' : 'Connection failed. Check credentials or network.'); setCloudTestLoading(false); }}
-                          className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white h-11 font-semibold">
-                          {cloudTestLoading ? 'Testing...' : 'Test Connection'}
-                        </Button>
+                      
+                      
+                      <div className="space-y-3">
+                        <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                          <div className="flex items-start gap-2">
+                            <div className="w-2 h-2 bg-blue-400 rounded-full mt-2 flex-shrink-0"></div>
+                            <div className="text-sm text-blue-300">
+                              <p className="font-medium mb-1">How to create your account:</p>
+                              <ol className="list-decimal list-inside space-y-1 text-xs">
+                                <li>Enter a unique username (3+ characters, letters/numbers only)</li>
+                                <li>Enter a secure password</li>
+                                <li>Click "Create Account in Cluster" - this will automatically create your account and cluster</li>
+                                <li>Once created, you can sign in with your credentials</li>
+                              </ol>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="p-3 bg-gray-500/10 border border-gray-500/20 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Database className="w-4 h-4 text-gray-400" />
+                              <span className="text-sm text-gray-300">Include sample data</span>
+                            </div>
+                            <Switch
+                              checked={includeDummyData}
+                              onCheckedChange={setIncludeDummyData}
+                            />
+                          </div>
+                          <p className="text-xs text-gray-400 mt-1">
+                            {includeDummyData 
+                              ? "Sample products and sales data will be added to help you get started" 
+                              : "Start with an empty database"
+                            }
+                          </p>
+                        </div>
+                        
+                        <div className="flex items-center gap-3">
+                          <Button 
+                            onClick={handleCreateCluster}
+                            className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white h-11 font-semibold w-full"
+                            disabled={!formData.username || !formData.password || cloudTestLoading}
+                          >
+                            {cloudTestLoading ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Creating Account & Cluster...
+                              </>
+                            ) : (
+                              'Create Account in Cluster'
+                            )}
+                          </Button>
+                        </div>
+                        
                         {cloudTestSuccess !== null && (
-                          <span className={cloudTestSuccess ? 'text-emerald-400' : 'text-red-400'}>{cloudTestMessage}</span>
+                          <div className={`p-3 rounded-lg flex items-center gap-2 ${
+                            cloudTestSuccess 
+                              ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' 
+                              : 'bg-red-500/10 border border-red-500/20 text-red-400'
+                          }`}>
+                            {cloudTestSuccess ? (
+                              <CheckCircle className="w-4 h-4" />
+                            ) : (
+                              <AlertCircle className="w-4 h-4" />
+                            )}
+                            <span className="text-sm">{cloudTestMessage}</span>
+                          </div>
                         )}
                       </div>
                     </CardContent>
@@ -554,12 +983,37 @@ export default function SignUpPage() {
                       <Input
                         id="username"
                         type="text"
-                        placeholder="Enter your username"
+                        placeholder="Enter unique username"
                         value={formData.username}
-                        onChange={(e) => handleInputChange('username', e.target.value)}
+                        onChange={(e) => {
+                          handleInputChange('username', e.target.value);
+                          setDatabaseConfig(prev => ({ ...prev, username: e.target.value }));
+                          // Debounce username check
+                          clearTimeout((window as any).usernameCheckTimeout);
+                          (window as any).usernameCheckTimeout = setTimeout(() => {
+                            handleCheckUsername(e.target.value);
+                          }, 500);
+                        }}
                         className="pl-10 bg-white/10 border-white/20 text-white placeholder-gray-400 h-12"
                       />
+                      {usernameCheckLoading && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-emerald-400"></div>
+                        </div>
+                      )}
                     </div>
+                    {usernameAvailable !== null && (
+                      <div className={`mt-1 text-xs flex items-center gap-1 ${
+                        usernameAvailable ? 'text-emerald-400' : 'text-red-400'
+                      }`}>
+                        {usernameAvailable ? (
+                          <CheckCircle className="w-3 h-3" />
+                        ) : (
+                          <AlertCircle className="w-3 h-3" />
+                        )}
+                        {usernameMessage}
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -584,9 +1038,12 @@ export default function SignUpPage() {
                       <Input
                         id="password"
                         type={showPassword ? "text" : "password"}
-                        placeholder="Enter your password"
+                        placeholder="Enter secure password"
                         value={formData.password}
-                        onChange={(e) => handleInputChange('password', e.target.value)}
+                        onChange={(e) => {
+                          handleInputChange('password', e.target.value);
+                          setDatabaseConfig(prev => ({ ...prev, password: e.target.value }));
+                        }}
                         className="pl-10 pr-10 bg-white/10 border-white/20 text-white placeholder-gray-400 h-12"
                       />
                       <Button

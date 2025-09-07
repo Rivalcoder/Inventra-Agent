@@ -47,6 +47,27 @@ class DatabaseService {
     return this.defaultConfig;
   }
 
+  // Method to get user-specific collection names
+  getUserCollectionName(baseCollection: string, userId?: string): string {
+    if (!userId) {
+      // If no userId provided, try to get from current user data
+      if (typeof window !== 'undefined') {
+        const userData = localStorage.getItem('userData');
+        if (userData) {
+          const user = JSON.parse(userData);
+          userId = user.userId;
+        }
+      }
+    }
+    
+    if (userId) {
+      return `${baseCollection}_${userId}`;
+    }
+    
+    // Fallback to base collection name if no userId
+    return baseCollection;
+  }
+
   // Method to check if user has database configuration
   hasUserConfig(): boolean {
     if (typeof window !== 'undefined') {
@@ -167,16 +188,46 @@ class DatabaseService {
   }
 
   private async connectMongoDB(config: DatabaseConfig): Promise<Db> {
-    // Handle empty username/password case
+    // Check for corrupted configurations
+    if (config.host && (config.host.includes('gmail.com') || config.host.includes('yahoo.com') || config.host.includes('hotmail.com'))) {
+      throw new Error(`Corrupted database configuration detected. Host contains invalid domain: ${config.host}. Please clear your configuration and try again.`);
+    }
+    
+    // Check for corrupted password (contains email domains)
+    if (config.password && (config.password.includes('gmail.com') || config.password.includes('yahoo.com') || config.password.includes('hotmail.com'))) {
+      throw new Error(`Corrupted database configuration detected. Password contains invalid domain: ${config.password}. Please clear your configuration and try again.`);
+    }
+    
+    // Debug: Log the configuration being used
+    console.log('MongoDB Config Debug:', {
+      host: config.host,
+      username: config.username,
+      password: config.password ? '***SET***' : 'NOT SET',
+      database: config.database,
+      port: config.port
+    });
+    
+    // Handle MongoDB Atlas connection format
     let url: string;
     if (!config.username || !config.password) {
       url = `mongodb://${config.host}:${config.port}/${config.database}`;
     } else {
-      url = `mongodb://${config.username}:${config.password}@${config.host}:${config.port}/${config.database}`;
+      // For MongoDB Atlas, use the proper connection string format
+      if (config.host.includes('mongodb.net')) {
+        // MongoDB Atlas connection string - ensure host doesn't already contain mongodb+srv
+        const cleanHost = config.host.replace(/^mongodb\+srv:\/\//, '').replace(/^mongodb:\/\//, '');
+        url = `mongodb+srv://${config.username}:${config.password}@${cleanHost}/${config.database}?retryWrites=true&w=majority`;
+      } else {
+        // Regular MongoDB connection string
+        url = `mongodb://${config.username}:${config.password}@${config.host}:${config.port}/${config.database}`;
+      }
     }
     
+    // Debug: Log the constructed URL (without password)
+    console.log('MongoDB URL Debug:', url.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'));
+    
     const client = new MongoClient(url, {
-      ssl: config.options?.ssl || false
+      ssl: config.options?.ssl || config.host.includes('mongodb.net') // Auto-enable SSL for Atlas
     });
 
     await client.connect();

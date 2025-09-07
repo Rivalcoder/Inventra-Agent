@@ -41,6 +41,12 @@ export default function Header() {
   }, []);
 
   const loadSettings = async () => {
+    // Check if user is authenticated before making API calls
+    const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
+    if (!isAuthenticated) {
+      return;
+    }
+    
     try {
       const settings = await getSettings();
       const logoSetting = settings.find(s => s.setting_key === 'logo');

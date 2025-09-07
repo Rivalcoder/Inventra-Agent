@@ -234,8 +234,33 @@ export default function SignInPage() {
       let userData = null;
 
       if (authMode === 'airtable') {
-        // Use Airtable service
-        userData = await airtableService.verifyUser(formData.email, formData.password);
+        // For cloud mode, authenticate against MongoDB
+        try {
+          const response = await fetch('/api/auth/mongodb-signin', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: formData.email,
+              password: formData.password
+            }),
+          });
+
+          const result = await response.json();
+          
+          if (result.success) {
+            userData = result.user;
+            console.log('User authenticated in MongoDB with userId:', userData.userId);
+          } else {
+            setError(result.message || 'Invalid email or password. Please try again.');
+            return;
+          }
+        } catch (error) {
+          console.error('MongoDB authentication failed:', error);
+          setError('Authentication failed. Please try again.');
+          return;
+        }
       } else {
         // Use local authentication
         if (!localService) throw new Error('Local service unavailable on server');
@@ -631,17 +656,34 @@ export default function SignInPage() {
                   <div className="mt-2 p-4 rounded-lg bg-white/5 border border-white/10">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <Database className="w-5 h-5 text-emerald-400" />
+                        {authMode === 'airtable' ? <Cloud className="w-5 h-5 text-emerald-400" /> : <Database className="w-5 h-5 text-emerald-400" />}
                         <span className="text-white font-medium">Database Configuration</span>
                       </div>
-                      <Badge variant="outline" className="border-emerald-500/40 text-emerald-300">Recommended</Badge>
+                      <Badge variant="outline" className="border-emerald-500/40 text-emerald-300">
+                        {authMode === 'airtable' ? 'Cloud' : 'Local'}
+                      </Badge>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                      <div className="text-gray-300"><span className="text-gray-400">Type:</span> MySQL</div>
-                      <div className="text-gray-300"><span className="text-gray-400">Host:</span> localhost:3306</div>
-                      <div className="text-gray-300"><span className="text-gray-400">Database:</span> ai_inventory</div>
+                      {authMode === 'airtable' ? (
+                        <>
+                          <div className="text-gray-300"><span className="text-gray-400">Type:</span> MongoDB Atlas</div>
+                          <div className="text-gray-300"><span className="text-gray-400">Host:</span> {process.env.NEXT_PUBLIC_MONGODB_CLUSTER_URL || 'cluster0.jxiaye0.mongodb.net'}</div>
+                          <div className="text-gray-300"><span className="text-gray-400">Database:</span> {process.env.NEXT_PUBLIC_MONGODB_DATABASE || 'ai_inventory'}</div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-gray-300"><span className="text-gray-400">Type:</span> MySQL</div>
+                          <div className="text-gray-300"><span className="text-gray-400">Host:</span> localhost:3306</div>
+                          <div className="text-gray-300"><span className="text-gray-400">Database:</span> ai_inventory</div>
+                        </>
+                      )}
                     </div>
-                    <p className="text-gray-400 text-xs mt-2">MySQL is recommended for most use cases. It's widely supported and has excellent performance.</p>
+                    <p className="text-gray-400 text-xs mt-2">
+                      {authMode === 'airtable' 
+                        ? 'MongoDB Atlas provides cloud-based database hosting with automatic scaling and backup.'
+                        : 'MySQL is recommended for local development. It\'s widely supported and has excellent performance.'
+                      }
+                    </p>
                   </div>
                 </CardContent>
               </Card>

@@ -127,6 +127,7 @@ export default function LandingPage() {
   ];
 
   useEffect(() => {
+    // Set visible immediately to avoid loading delay
     setIsVisible(true);
     
     // Generate particles with random positions
