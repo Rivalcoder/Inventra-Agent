@@ -49,12 +49,12 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Database connection test error:', error);
-    
+    const message = error instanceof Error ? error.message : 'Unknown database connection error';
+    const friendly = /Unable to connect to local MongoDB/.test(message)
+      ? message
+      : message;
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown database connection error' 
-      },
+      { success: false, error: friendly },
       { status: 500 }
     );
   }

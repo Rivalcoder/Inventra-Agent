@@ -226,12 +226,23 @@ class DatabaseService {
     // Debug: Log the constructed URL (without password)
     console.log('MongoDB URL Debug:', url.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'));
     
+    const isLocalHost = config.host.includes('localhost') || config.host.includes('127.0.0.1');
     const client = new MongoClient(url, {
-      ssl: config.options?.ssl || config.host.includes('mongodb.net') // Auto-enable SSL for Atlas
+      ssl: config.options?.ssl || config.host.includes('mongodb.net'), // Auto-enable SSL for Atlas
+      serverSelectionTimeoutMS: 3000,
+      directConnection: isLocalHost
     });
 
-    await client.connect();
-    return client.db(config.database);
+    try {
+      await client.connect();
+      return Object.assign(client.db(config.database), { client });
+    } catch (error: any) {
+      // Provide clearer guidance for local MongoDB not running
+      if (isLocalHost && (error?.code === 'ECONNREFUSED' || /ECONNREFUSED|ServerSelectionError/i.test(String(error?.message)))) {
+        throw new Error(`Unable to connect to local MongoDB at ${config.host}:${config.port}. Ensure MongoDB is installed and running (e.g., "mongod").`);
+      }
+      throw error;
+    }
   }
 
   private async connectPostgreSQL(config: DatabaseConfig): Promise<Pool> {

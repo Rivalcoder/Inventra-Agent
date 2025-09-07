@@ -52,6 +52,15 @@ export default function DatabaseSettingsPage() {
       });
 
       const result = await response.json();
+      if (result.success) {
+        // Auto-persist the tested config so subsequent API requests use the same credentials
+        try {
+          localStorage.setItem('databaseConfig', JSON.stringify(config));
+          setDatabaseConfig(config);
+        } catch (e) {
+          console.error('Failed to persist database config after successful test:', e);
+        }
+      }
       return result.success;
     } catch (error) {
       console.error('Connection test failed:', error);

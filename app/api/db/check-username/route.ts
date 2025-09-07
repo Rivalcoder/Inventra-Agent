@@ -13,7 +13,9 @@ export async function POST(request: NextRequest) {
     }
 
     // For local signup (e.g., MySQL/PostgreSQL) or explicit bypass, do basic validation only
-    const isLocalOrBypass = skipCloudCheck === true || (dbType && dbType !== 'mongodb');
+    const host = (clusterUrl || '').toString();
+    const isAtlasLike = host.includes('mongodb.net') || host.startsWith('mongodb+srv://');
+    const isLocalOrBypass = skipCloudCheck === true || (dbType && dbType !== 'mongodb') || (dbType === 'mongodb' && !isAtlasLike);
     if (isLocalOrBypass) {
       if (username.length < 3) {
         return NextResponse.json({ available: false, message: 'Username must be at least 3 characters long' });

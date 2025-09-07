@@ -383,6 +383,9 @@ export default function SignUpPage() {
     try {
       setUsernameMessage('Checking username availability...');
       
+      const host = databaseConfig.host || '';
+      const isCloudMongo = databaseConfig.type === 'mongodb' && (host.includes('mongodb.net') || host.startsWith('mongodb+srv://'));
+
       const response = await fetch('/api/db/check-username', {
         method: 'POST',
         headers: {
@@ -391,7 +394,9 @@ export default function SignUpPage() {
         body: JSON.stringify({ 
           username,
           clusterUrl: databaseConfig.host,
-          database: databaseConfig.database
+          database: databaseConfig.database,
+          dbType: databaseConfig.type,
+          skipCloudCheck: !isCloudMongo
         }),
       });
 

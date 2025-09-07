@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { MongoClient } from 'mongodb';
+import { MongoClient, CreateIndexesOptions } from 'mongodb';
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       const results = [];
 
       // Define the proper indexes for each collection
-      const collectionIndexes = {
+      const collectionIndexes: Record<string, Array<{ keys: Record<string, 1 | -1>; options?: CreateIndexesOptions & { name?: string; unique?: boolean } }>> = {
         products: [
           { keys: { userId: 1, name: 1 }, options: { unique: true, name: 'userId_name_unique' } }
         ],
@@ -73,6 +73,11 @@ export async function POST(request: NextRequest) {
             continue;
           }
           
+          // If the index has no name for some reason, skip it (TypeScript safety)
+          if (!indexName) {
+            continue;
+          }
+
           // Check if this is a unique index that doesn't include userId
           if (index.unique && !indexKey.userId) {
             try {
@@ -86,11 +91,12 @@ export async function POST(request: NextRequest) {
         
         // Create new indexes with proper user isolation
         for (const indexDef of indexes) {
-          const { keys, options = {} } = indexDef;
-          const indexName = options.name || Object.keys(keys).map(k => `${k}_${keys[k]}`).join('_');
+          const { keys, options } = indexDef;
+          const indexOptions: CreateIndexesOptions = options ?? {};
+          const indexName = (options?.name as string) || Object.keys(keys).map(k => `${k}_${(keys as any)[k]}`).join('_');
           
           try {
-            await collection.createIndex(keys, options);
+            await collection.createIndex(keys as any, indexOptions);
             results.push(`Created index: ${indexName} for ${collectionName}`);
           } catch (error: any) {
             if (error.code === 85) {

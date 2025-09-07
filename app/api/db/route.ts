@@ -54,12 +54,14 @@ async function getDatabaseConfig(request: Request): Promise<DatabaseConfig> {
     
     if (configParam) {
       const config = JSON.parse(configParam);
-      // Check for corrupted configurations
-      if (config.host && (config.host.includes('gmail.com') || config.host.includes('yahoo.com') || config.host.includes('hotmail.com'))) {
-        throw new Error(`Corrupted database configuration detected. Host contains invalid domain: ${config.host}. Please clear your configuration and try again.`);
-      }
-      if (config.password && (config.password.includes('gmail.com') || config.password.includes('yahoo.com') || config.password.includes('hotmail.com'))) {
-        throw new Error(`Corrupted database configuration detected. Password contains invalid domain: ${config.password}. Please clear your configuration and try again.`);
+      // Check for corrupted configurations (MongoDB only)
+      if (config.type === 'mongodb') {
+        if (config.host && (config.host.includes('gmail.com') || config.host.includes('yahoo.com') || config.host.includes('hotmail.com'))) {
+          throw new Error(`Corrupted database configuration detected. Host contains invalid domain: ${config.host}. Please clear your configuration and try again.`);
+        }
+        if (config.password && (config.password.includes('gmail.com') || config.password.includes('yahoo.com') || config.password.includes('hotmail.com'))) {
+          throw new Error(`Corrupted database configuration detected. Password contains invalid domain: ${config.password}. Please clear your configuration and try again.`);
+        }
       }
       return config;
     }
@@ -68,29 +70,31 @@ async function getDatabaseConfig(request: Request): Promise<DatabaseConfig> {
     const userConfig = request.headers.get('x-user-db-config');
     if (userConfig) {
       const config = JSON.parse(userConfig);
-      // Check for corrupted configurations
-      if (config.host && (config.host.includes('gmail.com') || config.host.includes('yahoo.com') || config.host.includes('hotmail.com'))) {
-        throw new Error(`Corrupted database configuration detected. Host contains invalid domain: ${config.host}. Please clear your configuration and try again.`);
-      }
-      if (config.password && (config.password.includes('gmail.com') || config.password.includes('yahoo.com') || config.password.includes('hotmail.com'))) {
-        throw new Error(`Corrupted database configuration detected. Password contains invalid domain: ${config.password}. Please clear your configuration and try again.`);
+      // Check for corrupted configurations (MongoDB only)
+      if (config.type === 'mongodb') {
+        if (config.host && (config.host.includes('gmail.com') || config.host.includes('yahoo.com') || config.host.includes('hotmail.com'))) {
+          throw new Error(`Corrupted database configuration detected. Host contains invalid domain: ${config.host}. Please clear your configuration and try again.`);
+        }
+        if (config.password && (config.password.includes('gmail.com') || config.password.includes('yahoo.com') || config.password.includes('hotmail.com'))) {
+          throw new Error(`Corrupted database configuration detected. Password contains invalid domain: ${config.password}. Please clear your configuration and try again.`);
+        }
       }
       return config;
     }
     
-    // For development, provide a default configuration
+    // For development, provide a sensible default configuration
     if (process.env.NODE_ENV === 'development') {
       console.log('Using default development database configuration');
-      
-      // Check if we have MongoDB Atlas credentials
+
+      // Prefer MongoDB Atlas if env credentials are present (cloud only)
       if (process.env.DB_USERNAME && process.env.DB_PASSWORD && process.env.DB_HOST) {
         console.log('Using MongoDB Atlas configuration from environment variables');
         return {
           type: 'mongodb',
-          host: process.env.DB_HOST, // cluster0.jxiaye0.mongodb.net
+          host: process.env.DB_HOST,
           port: 27017,
-          username: process.env.DB_USERNAME, // inventra
-          password: process.env.DB_PASSWORD, // inventra2006
+          username: process.env.DB_USERNAME,
+          password: process.env.DB_PASSWORD,
           database: process.env.MONGODB_DATABASE || 'ai_inventory',
           options: {
             ssl: true,
@@ -99,8 +103,8 @@ async function getDatabaseConfig(request: Request): Promise<DatabaseConfig> {
           }
         };
       }
-      
-      // Fallback to MySQL
+
+      // Fallback to local MySQL for quick dev start if no env Atlas credentials
       return {
         type: 'mysql',
         host: 'localhost',

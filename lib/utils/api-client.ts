@@ -3,19 +3,7 @@ export class ApiClient {
   private static getDatabaseConfig(): any {
     if (typeof window === 'undefined') return null;
     
-    // Try to get admin database configuration first (for actual database operations)
-    const adminDbConfig = localStorage.getItem('admin_db_config');
-    if (adminDbConfig) {
-      try {
-        const config = JSON.parse(adminDbConfig);
-        console.log('Using admin database config:', config);
-        return config;
-      } catch (error) {
-        console.error('Error parsing admin config:', error);
-      }
-    }
-    
-    // Try to get user's database configuration
+    // Prefer user's database configuration (current session choice)
     const userDbConfig = localStorage.getItem('databaseConfig');
     if (userDbConfig) {
       try {
@@ -25,6 +13,18 @@ export class ApiClient {
       } catch (error) {
         console.error('Error parsing database config:', error);
         return null;
+      }
+    }
+    
+    // Fallback to admin database configuration (if explicitly set)
+    const adminDbConfig = localStorage.getItem('admin_db_config');
+    if (adminDbConfig) {
+      try {
+        const config = JSON.parse(adminDbConfig);
+        console.log('Using admin database config:', config);
+        return config;
+      } catch (error) {
+        console.error('Error parsing admin config:', error);
       }
     }
     
