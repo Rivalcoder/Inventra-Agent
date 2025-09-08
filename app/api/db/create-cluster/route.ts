@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     if (!database) missing.push('database');
     if (missing.length) {
       return NextResponse.json(
-        { error: `Missing required fields: ${missing.join(', ')}` },
+        { success: false, message: `Missing required fields: ${missing.join(', ')}` },
         { status: 400 }
       );
     }
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
         envKeys: Object.keys(process.env).filter(key => key.includes('MONGODB'))
       });
       return NextResponse.json(
-        { 
+        {
           success: false,
           message: 'MongoDB Atlas credentials not configured. Please set DB_USERNAME, DB_PASSWORD, and DB_HOST in your environment variables.'
         },
@@ -74,10 +74,13 @@ export async function POST(request: NextRequest) {
       });
 
       if (existingUser) {
-        return NextResponse.json({
-          success: false,
-          message: 'User already exists in the cluster'
-        });
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'User already exists in the cluster'
+          },
+          { status: 409 }
+        );
       }
 
       // Create new user in the cluster
@@ -308,13 +311,24 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Cluster creation error:', error);
-    
+
+    let status = 500;
+    let message = 'Failed to create user in cluster';
+    if (error instanceof Error) {
+      message = error.message;
+      // Basic mapping for common Mongo/validation errors
+      if (message.toLowerCase().includes('e11000') || message.toLowerCase().includes('duplicate')) {
+        status = 409;
+        message = 'Duplicate user detected. Please choose a different username or email.';
+      }
+    }
+
     return NextResponse.json(
-      { 
+      {
         success: false,
-        message: error instanceof Error ? error.message : 'Failed to create user in cluster'
+        message
       },
-      { status: 500 }
+      { status }
     );
   }
 }

@@ -451,6 +451,7 @@ export default function SignUpPage() {
         },
         body: JSON.stringify({
           username: formData.username,
+          email: formData.email,
           password: formData.password,
           database: databaseConfig.database,
           includeDummyData: includeDummyData
@@ -477,7 +478,7 @@ export default function SignUpPage() {
         console.log('User account created with userId:', result.userId);
         console.log('User collections created:', result.userCollections);
       } else {
-        setCloudTestMessage(`❌ ${result.message || 'Failed to create account. Please try again.'}`);
+        setCloudTestMessage(`❌ ${result.message || result.error || 'Failed to create account. Please try again.'}`);
       }
     } catch (error) {
       console.error('Cluster creation failed:', error);
@@ -618,6 +619,7 @@ export default function SignUpPage() {
             },
             body: JSON.stringify({
               username: formData.username,
+              email: formData.email,
               password: formData.password,
               database: databaseConfig.database,
               includeDummyData: includeDummyData
@@ -636,7 +638,7 @@ export default function SignUpPage() {
             console.log('User account created in MongoDB with userId:', userId);
             console.log('User collections created:', result.userCollections);
           } else {
-            setError(result.message || 'Failed to create account in cloud database.');
+            setError(result.message || result.error || 'Failed to create account in cloud database.');
             return;
           }
         } catch (error) {
