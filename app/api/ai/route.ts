@@ -19,13 +19,23 @@ function formatDateForMySQL(date: Date): string {
 }
 
 // Helper function to fetch data with database configuration
-async function fetchDataWithConfig(dbConfig: any) {
-  const headers = {
+async function fetchDataWithConfig(dbConfig: any, req: Request) {
+  const userIdHeader = req.headers.get('x-user-id');
+  const computedUserId = dbConfig?.userId || userIdHeader || undefined;
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'x-user-db-config': JSON.stringify(dbConfig)
   };
+  if (computedUserId) headers['x-user-id'] = String(computedUserId);
 
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
+  const baseUrl = (() => {
+    try {
+      const { origin } = new URL(req.url);
+      return origin;
+    } catch {
+      return process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
+    }
+  })();
   
   // Function to fetch with retry
   const fetchWithRetry = async (url: string, retries = 3): Promise<any> => {
@@ -123,7 +133,7 @@ export async function POST(req: Request) {
     }
 
     // Fetch all relevant data with database configuration
-    const { products, sales, stats, topProducts, lowStock } = await fetchDataWithConfig(dbConfig);
+    const { products, sales, stats, topProducts, lowStock } = await fetchDataWithConfig(dbConfig, req);
 
     // Prepare the context with current data and current datetime
     const now = new Date();
@@ -178,6 +188,8 @@ export async function POST(req: Request) {
                 - Give Query Accordingly To The Db Structure And Also Give The Query In The SqlQuery Field Area (Refer Below For The Db Structure and Given Db Datas)
                 - Do NOT include the 'id' field in the INSERT statement for the 'sales' table. The database will generate it automatically. For example:
                   INSERT INTO sales (productId, productName, quantity, price, total, date, customer) VALUES ('1', 'Laptop Pro', 2, 100000, 200000, '${context.now}', 'Anonymous');
+                - IMPORTANT (MySQL ONLY_FULL_GROUP_BY): When using GROUP BY, every non-aggregated selected expression must appear in the GROUP BY clause. Do not ORDER BY a non-grouped, non-aggregated column. Prefer ordering by grouped expressions or by aggregates. For time-based grouping, GROUP BY YEAR(date), MONTH(date) and ORDER BY YEAR(date), MONTH(date).
+                - For monthly summaries, select YEAR(date) AS SaleYear, MONTH(date) AS SaleMonthNumber, MONTHNAME(date) AS SaleMonthName, then GROUP BY SaleYear, SaleMonthNumber and ORDER BY SaleYear, SaleMonthNumber. Do not ORDER BY MONTH(date) alone if it is not selected and grouped.
                 
                 # If user Ask About The Datas Answer The Question By Viewing The datas and Db  Structure Give The Answers
                 # If User Ask To Add Update Or Delete The Data:
@@ -214,6 +226,7 @@ export async function POST(req: Request) {
                     - Format SQL queries in code blocks with \`\`\`sql
                     - Add comments to explain complex queries
                     - if any Customer Name Is Not Provided In The User Query Use 'Anonymous' As The Customer Name In The SQL Statement DOnt ask And Other Important Details ask And Also Get from Db references
+                    - Ensure GROUP BY queries are compatible with MySQL ONLY_FULL_GROUP_BY mode by grouping all non-aggregated columns used in SELECT and ORDER BY.
 
                 Important Notes:
                 - Be flexible in your response format based on the query type

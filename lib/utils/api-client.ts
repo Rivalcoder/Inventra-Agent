@@ -79,6 +79,13 @@ export class ApiClient {
           console.error('Error parsing userData:', error);
         }
       }
+
+      // Fallback: use a locally stored username as userId for per-user scoping
+      const currentUsername = localStorage.getItem('currentUsername');
+      if (currentUsername && !headers['x-user-id']) {
+        headers['x-user-id'] = currentUsername;
+        console.log('Added userId from currentUsername to headers:', currentUsername);
+      }
     }
 
     return headers;

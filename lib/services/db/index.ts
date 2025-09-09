@@ -223,7 +223,7 @@ class DatabaseService {
       port: config.port
     });
     
-    // Handle MongoDB Atlas connection format
+    // Handle MongoDB Atlas connection format and authSource for local auth
     let url: string;
     if (!config.username || !config.password) {
       url = `mongodb://${config.host}:${config.port}/${config.database}`;
@@ -232,10 +232,18 @@ class DatabaseService {
       if (config.host.includes('mongodb.net')) {
         // MongoDB Atlas connection string - ensure host doesn't already contain mongodb+srv
         const cleanHost = config.host.replace(/^mongodb\+srv:\/\//, '').replace(/^mongodb:\/\//, '');
-        url = `mongodb+srv://${config.username}:${config.password}@${cleanHost}/${config.database}?retryWrites=true&w=majority`;
+        const encUser = encodeURIComponent(config.username);
+        const encPass = encodeURIComponent(config.password);
+        url = `mongodb+srv://${encUser}:${encPass}@${cleanHost}/${config.database}?retryWrites=true&w=majority`;
       } else {
         // Regular MongoDB connection string
-        url = `mongodb://${config.username}:${config.password}@${config.host}:${config.port}/${config.database}`;
+        const encUser = encodeURIComponent(config.username);
+        const encPass = encodeURIComponent(config.password);
+        const params: string[] = [];
+        // Respect explicit authSource if provided (common for local users created in 'admin')
+        const authSource = config.options?.authSource || config.database;
+        if (authSource) params.push(`authSource=${encodeURIComponent(authSource)}`);
+        url = `mongodb://${encUser}:${encPass}@${config.host}:${config.port}/${config.database}${params.length ? `?${params.join('&')}` : ''}`;
       }
     }
     
@@ -484,9 +492,10 @@ class DatabaseService {
       }
     }
 
-    // Create indexes
-    await db.collection('products').createIndex({ name: 1 }, { unique: true });
-    await db.collection('sales').createIndex({ productId: 1 });
+    // Create per-user indexes (compound where relevant)
+    await db.collection('products').createIndex({ userId: 1, name: 1 }, { unique: true });
+    await db.collection('products').createIndex({ userId: 1, id: 1 }, { unique: true });
+    await db.collection('sales').createIndex({ userId: 1, productId: 1 });
     await db.collection('settings').createIndex({ setting_key: 1 }, { unique: true });
   }
 

@@ -650,6 +650,8 @@ export default function SignUpPage() {
         // Create user in local storage
         if (!localService) throw new Error('Local service unavailable on server');
         success = await localService.createUser(userData);
+        // Use username as stable per-user scope
+        userId = formData.username || 'local-user';
       }
 
       if (success) {
@@ -657,10 +659,17 @@ export default function SignUpPage() {
         
         // Store authentication state with mode information
         if (typeof window !== 'undefined') {
+          // Persist currentUsername to drive x-user-id in API calls
+          if (formData.username) localStorage.setItem('currentUsername', formData.username);
+
+          // Inject userId into databaseConfig for stable scoping
+          const cfg = { ...databaseConfig } as any;
+          (cfg as any).userId = userId || formData.username || 'local-user';
+
           localStorage.setItem('isAuthenticated', 'true');
           localStorage.setItem('userData', JSON.stringify(userData));
           localStorage.setItem('authMode', authMode);
-          localStorage.setItem('databaseConfig', JSON.stringify(databaseConfig));
+          localStorage.setItem('databaseConfig', JSON.stringify(cfg));
         }
         
         // Redirect to dashboard after a short delay
@@ -801,7 +810,7 @@ export default function SignUpPage() {
           )}
 
           {/* Main Content - Left Right Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
             {/* Left Side - Database Configuration */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
@@ -815,9 +824,9 @@ export default function SignUpPage() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3 }}
-                  className="h-[calc(100vh-250px)] overflow-y-auto rounded-lg"
+                  className="rounded-lg h-full"
                 >
-                  <Card className="shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20 w-full h-fit">
+                  <Card className="shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20 w-full h-full">
                     <CardHeader>
                       <CardTitle className="text-white text-lg flex items-center">
                         <Database className="w-5 h-5 mr-2" />
@@ -840,9 +849,9 @@ export default function SignUpPage() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3 }}
-                  className="h-[calc(100vh-250px)] overflow-y-auto rounded-lg"
+                  className="rounded-lg h-full"
                 >
-                  <Card className="shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20 w-full h-fit">
+                  <Card className="shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20 w-full h-full">
                     <CardHeader>
                       <CardTitle className="text-white text-lg flex items-center">
                         <Cloud className="w-5 h-5 mr-2" />
@@ -966,8 +975,9 @@ export default function SignUpPage() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.3, delay: 0.2 }}
+              className="h-full"
             >
-              <Card className="shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20 h-fit">
+              <Card className="shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20 h-full">
                 <CardHeader>
                   <CardTitle className="text-white text-xl flex items-center">
                     <User className="w-6 h-6 mr-3" />
@@ -986,6 +996,17 @@ export default function SignUpPage() {
                         value={formData.username}
                         onChange={(e) => {
                           handleInputChange('username', e.target.value);
+                          // Persist the username for API headers (x-user-id)
+                          try {
+                            if (typeof window !== 'undefined') {
+                              localStorage.setItem('currentUsername', e.target.value || '');
+                              // Also keep databaseConfig.userId in sync for stability
+                              const cfgRaw = localStorage.getItem('databaseConfig');
+                              const cfgObj = cfgRaw ? JSON.parse(cfgRaw) : {};
+                              cfgObj.userId = e.target.value || 'local-user';
+                              localStorage.setItem('databaseConfig', JSON.stringify(cfgObj));
+                            }
+                          } catch {}
                           // Debounce username check
                           clearTimeout((window as any).usernameCheckTimeout);
                           (window as any).usernameCheckTimeout = setTimeout(() => {

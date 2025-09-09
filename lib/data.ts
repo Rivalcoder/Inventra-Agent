@@ -92,6 +92,10 @@ export async function createSale(sale: Omit<Sale, 'id'>): Promise<Sale> {
   return postToApi('sale', saleData);
 }
 
+export async function deleteSale(saleId: string): Promise<{ success: boolean }> {
+  return postToApi('delete-sale', { saleId });
+}
+
 // Dashboard data
 export async function getDashboardStats(): Promise<DashboardStats> {
   const data = await fetchFromApi('stats');

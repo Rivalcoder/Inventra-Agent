@@ -32,7 +32,8 @@ function getUserIdFromRequest(request: Request): string | null {
       return config.userId || null;
     }
     
-    return null;
+    // Fallback for local development: use a stable default user id
+    return 'local-user';
   } catch (error) {
     console.error('Error getting userId from request:', error);
     return null;
@@ -52,6 +53,12 @@ async function getDatabaseConfig(request: Request): Promise<DatabaseConfig> {
     const url = new URL(request.url);
     const configParam = url.searchParams.get('config');
     
+    // Local-mode hints: URL, header, or env
+    const urlMode = url.searchParams.get('mode');
+    const headerMode = request.headers.get('x-db-mode');
+    const envMode = (process.env.DB_MODE || process.env.DB_FORCE_LOCAL || '').toString().toLowerCase();
+    const forceLocalMode = (urlMode === 'local') || (headerMode === 'local') || (envMode === 'local' || envMode === 'true');
+
     if (configParam) {
       const config = JSON.parse(configParam);
       if (config.type === 'mysql') {
@@ -75,7 +82,8 @@ async function getDatabaseConfig(request: Request): Promise<DatabaseConfig> {
     if (userConfig) {
       const config = JSON.parse(userConfig);
 
-      // If we have secure MongoDB env credentials, prefer them over any unsafe/empty header configs
+      // If we have secure MongoDB env credentials, prefer them only over UNSAFE MongoDB header configs.
+      // Never override an explicit MySQL/PostgreSQL header config when in local mode or otherwise.
       const hasEnvMongo = Boolean(process.env.DB_USERNAME && process.env.DB_PASSWORD && process.env.DB_HOST);
 
       // Validate header config safety
@@ -89,9 +97,11 @@ async function getDatabaseConfig(request: Request): Promise<DatabaseConfig> {
       const headerPassHasEmailDomain = typeof headerPass === 'string' && (headerPass.includes('gmail.com') || headerPass.includes('yahoo.com') || headerPass.includes('hotmail.com'));
       const headerHostInvalid = !headerHost || typeof headerHost !== 'string' || (headerHost as string).includes('gmail.com') || (headerHost as string).includes('yahoo.com') || (headerHost as string).includes('hotmail.com');
 
-      // If header requests MySQL or has unsafe Mongo creds, and env mongo exists, use env mongo
-      if (hasEnvMongo && (!isMongo || headerUserEmpty || headerPassEmpty || headerPassHasEmailDomain || headerHostInvalid)) {
-        console.log('Using MongoDB Atlas configuration from environment variables (overriding unsafe header config)');
+      // Only override when header asked for MongoDB but creds look unsafe and it's NOT a localhost target.
+      // Respect local Mongo usage (no auth) when host is localhost/127.0.0.1.
+      const isLocalMongoHost = typeof headerHost === 'string' && (headerHost === 'localhost' || headerHost === '127.0.0.1');
+      if (!forceLocalMode && hasEnvMongo && isMongo && !isLocalMongoHost && (headerUserEmpty || headerPassEmpty || headerPassHasEmailDomain || headerHostInvalid)) {
+        console.log('Using MongoDB Atlas configuration from environment variables (overriding unsafe header MongoDB config)');
         return {
           type: 'mongodb',
           host: process.env.DB_HOST as string,
@@ -126,6 +136,26 @@ async function getDatabaseConfig(request: Request): Promise<DatabaseConfig> {
     // For development, provide a sensible default configuration
     if (process.env.NODE_ENV === 'development') {
       console.log('Using default development database configuration');
+
+      // If explicitly in local mode, always prefer local MySQL default
+      if (forceLocalMode) {
+        const cfg = {
+          type: 'mysql',
+          host: 'localhost',
+          port: 3306,
+          username: 'root',
+          password: '',
+          database: 'ai_inventory',
+          options: {
+            ssl: false,
+            connectionLimit: 10,
+            charset: 'utf8mb4'
+          }
+        } as DatabaseConfig;
+        const masked = cfg.password.length > 0 ? `${cfg.password[0]}***(${cfg.password.length})` : '(empty)';
+        console.log('Resolved DB Config from DEV local mode (MySQL):', { host: cfg.host, port: cfg.port, username: cfg.username, password: masked, database: cfg.database });
+        return cfg;
+      }
 
       // Prefer MongoDB Atlas if env credentials are present (cloud only)
       if (process.env.DB_USERNAME && process.env.DB_PASSWORD && process.env.DB_HOST) {
@@ -241,10 +271,15 @@ async function ensureInitialized(request: Request) {
 
   if (!isInitialized) {
     if (!initializationPromise) {
-      const config = await getDatabaseConfig(request);
-      initializationPromise = initializeDatabase(config).then(() => {
+      // Create the promise immediately to avoid races between concurrent requests
+      initializationPromise = (async () => {
+        const config = await getDatabaseConfig(request);
+        await initializeDatabase(config);
+      })()
+      .then(() => {
         isInitialized = true;
-      }).catch((error) => {
+      })
+      .catch((error) => {
         console.error('Failed to initialize database:', error);
         isInitialized = false;
         initializationPromise = null;
@@ -514,6 +549,76 @@ async function insertDummyData(config: DatabaseConfig) {
   }
 }
 
+// Ensure a MongoDB user document exists and is seeded with dummy data if missing
+async function ensureMongoUserData(request: Request, config: DatabaseConfig) {
+  if (config.type !== 'mongodb') return;
+  const userId = getUserIdFromRequest(request) || 'local-user';
+  if (!userId) return;
+
+  const connection = await dbService.connect(config);
+  const db = connection.connection as Db;
+
+  const productsCount = await db.collection('products').countDocuments({ userId });
+  const salesCount = await db.collection('sales').countDocuments({ userId });
+
+  // Migrate any orphaned documents without userId to the current user if user has none
+  if (productsCount === 0) {
+    const orphanProducts = await db.collection('products').countDocuments({ userId: { $exists: false } });
+    if (orphanProducts > 0) {
+      await db.collection('products').updateMany({ userId: { $exists: false } }, { $set: { userId } });
+    }
+  }
+  if (salesCount === 0) {
+    const orphanSales = await db.collection('sales').countDocuments({ userId: { $exists: false } });
+    if (orphanSales > 0) {
+      await db.collection('sales').updateMany({ userId: { $exists: false } }, { $set: { userId } });
+    }
+  }
+
+  const newProductsCount = await db.collection('products').countDocuments({ userId });
+  const newSalesCount = await db.collection('sales').countDocuments({ userId });
+  if (newProductsCount > 0 && newSalesCount > 0) return;
+
+  console.log(`Seeding Mongo user data for user: ${userId}`);
+  const now = formatDateForMySQL(new Date());
+  const products = [
+    { id: '1', name: 'Laptop Pro', description: 'High-performance laptop for professionals', category: 'Electronics', price: 1299.99, stock: 15, minStock: 5, supplier: 'TechWorld Inc', createdAt: now, updatedAt: now },
+    { id: '2', name: 'Wireless Mouse', description: 'Ergonomic wireless mouse with long battery life', category: 'Accessories', price: 29.99, stock: 42, minStock: 10, supplier: 'TechWorld Inc', createdAt: now, updatedAt: now },
+    { id: '3', name: 'USB-C Dock', description: 'All-in-one docking station with multiple ports', category: 'Accessories', price: 89.99, stock: 28, minStock: 8, supplier: 'ConnectAll Ltd', createdAt: now, updatedAt: now },
+    { id: '4', name: '4K Monitor', description: '32-inch 4K UHD display with HDR', category: 'Electronics', price: 499.99, stock: 12, minStock: 3, supplier: 'DisplayTech Co', createdAt: now, updatedAt: now },
+    { id: '5', name: 'Mechanical Keyboard', description: 'RGB mechanical keyboard with customizable keys', category: 'Accessories', price: 149.99, stock: 35, minStock: 7, supplier: 'KeyMaster Inc', createdAt: now, updatedAt: now }
+  ];
+
+  const sales: Sale[] = [];
+  const startDate = new Date();
+  startDate.setMonth(startDate.getMonth() - 3);
+  for (const p of products) {
+    const num = Math.floor(Math.random() * 6) + 5;
+    for (let i = 0; i < num; i++) {
+      const saleDate = new Date(startDate);
+      saleDate.setDate(saleDate.getDate() + Math.floor(Math.random() * 90));
+      const quantity = Math.floor(Math.random() * 5) + 1;
+      sales.push({
+        id: crypto.randomUUID(),
+        productId: p.id,
+        productName: p.name,
+        quantity,
+        price: p.price,
+        total: p.price * quantity,
+        date: formatDateForMySQL(saleDate),
+        customer: `Customer ${Math.floor(Math.random() * 1000)}`
+      });
+    }
+  }
+
+  if (newProductsCount === 0) {
+    await db.collection('products').insertMany(products.map(p => ({ ...p, userId })));
+  }
+  if (newSalesCount === 0) {
+    await db.collection('sales').insertMany(sales.map(s => ({ ...s, userId })));
+  }
+}
+
 // API route handlers
 export async function GET(request: Request) {
   try {
@@ -541,6 +646,11 @@ export async function GET(request: Request) {
       connection = await dbService.connect(config);
     } catch (connError) {
       throw connError;
+    }
+
+    // Ensure per-user seed for MongoDB (idempotent)
+    if (config.type === 'mongodb') {
+      await ensureMongoUserData(request, config);
     }
 
     switch (action) {
@@ -574,11 +684,9 @@ export async function GET(request: Request) {
           return NextResponse.json(stats);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const userId = getUserIdFromRequest(request);
-          if (!userId) return NextResponse.json({ totalSales: 0, totalQuantity: 0, totalRevenue: 0, totalProducts: 0, totalStock: 0, totalValue: 0 });
-          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.products': 1, 'data.sales': 1 } });
-          const products = Array.isArray(user?.data?.products) ? user.data.products : [];
-          const sales = Array.isArray(user?.data?.sales) ? user.data.sales : [];
+          const userId = getUserIdFromRequest(request) || 'local-user';
+          const products = await db.collection('products').find({ userId }).toArray();
+          const sales = await db.collection('sales').find({ userId }).toArray();
           const stats = {
             totalSales: sales.length,
             totalQuantity: sales.reduce((sum: number, s: any) => sum + (Number(s.quantity) || 0), 0),
@@ -636,10 +744,8 @@ export async function GET(request: Request) {
           return NextResponse.json(salesByPeriod);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const userId = getUserIdFromRequest(request);
-          if (!userId) return NextResponse.json([]);
-          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.sales': 1 } });
-          const sales = Array.isArray(user?.data?.sales) ? user.data.sales : [];
+          const userId = getUserIdFromRequest(request) || 'local-user';
+          const sales = await db.collection('sales').find({ userId }).toArray();
           const since = Date.now() - 6 * 30 * 24 * 60 * 60 * 1000;
           const buckets = new Map<string, { month: string; revenue: number; quantity: number }>();
           for (const s of sales) {
@@ -685,10 +791,8 @@ export async function GET(request: Request) {
           return NextResponse.json(lowStockProducts);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const userId = getUserIdFromRequest(request);
-          if (!userId) return NextResponse.json([]);
-          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.products': 1 } });
-          const products = Array.isArray(user?.data?.products) ? user.data.products : [];
+          const userId = getUserIdFromRequest(request) || 'local-user';
+          const products = await db.collection('products').find({ userId }).toArray();
           const lowStock = products
             .filter((p: any) => (Number(p.stock) || 0) <= (Number(p.minStock) || 0))
             .map((p: any) => ({ ...p, stockRatio: (Number(p.minStock) || 0) === 0 ? Infinity : (Number(p.stock) || 0) / (Number(p.minStock) || 0) }))
@@ -725,11 +829,9 @@ export async function GET(request: Request) {
           return NextResponse.json(topProducts);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const userId = getUserIdFromRequest(request);
-          if (!userId) return NextResponse.json([]);
-          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.products': 1, 'data.sales': 1 } });
-          const products = Array.isArray(user?.data?.products) ? user.data.products : [];
-          const sales = Array.isArray(user?.data?.sales) ? user.data.sales : [];
+          const userId = getUserIdFromRequest(request) || 'local-user';
+          const products = await db.collection('products').find({ userId }).toArray();
+          const sales = await db.collection('sales').find({ userId }).toArray();
           const revenueByProduct = new Map<string, { revenue: number; sales: number }>();
           for (const s of sales) {
             const entry = revenueByProduct.get(s.productId) || { revenue: 0, sales: 0 };
@@ -775,10 +877,8 @@ export async function GET(request: Request) {
           return NextResponse.json(recentSales);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const userId = getUserIdFromRequest(request);
-          if (!userId) return NextResponse.json([]);
-          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.sales': 1 } });
-          const sales = Array.isArray(user?.data?.sales) ? user.data.sales : [];
+          const userId = getUserIdFromRequest(request) || 'local-user';
+          const sales = await db.collection('sales').find({ userId }).toArray();
           const recent = sales
             .slice()
             .sort((a: any, b: any) => new Date(b.date || b.saleDate).getTime() - new Date(a.date || a.saleDate).getTime())
@@ -805,10 +905,8 @@ export async function GET(request: Request) {
           return NextResponse.json(products);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const userId = getUserIdFromRequest(request);
-          if (!userId) return NextResponse.json([]);
-          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.products': 1 } });
-          const products = Array.isArray(user?.data?.products) ? user.data.products : [];
+          const userId = getUserIdFromRequest(request) || 'local-user';
+          const products = await db.collection('products').find({ userId }).toArray();
           console.log(`Found ${products.length} products for user: ${userId}`);
           return NextResponse.json(products);
         } else if (config.type === 'postgresql') {
@@ -838,10 +936,8 @@ export async function GET(request: Request) {
           return NextResponse.json(sales);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const userId = getUserIdFromRequest(request);
-          if (!userId) return NextResponse.json([]);
-          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.sales': 1 } });
-          const sales = Array.isArray(user?.data?.sales) ? user.data.sales : [];
+          const userId = getUserIdFromRequest(request) || 'local-user';
+          const sales = await db.collection('sales').find({ userId }).toArray();
           console.log(`Found ${sales.length} sales for user: ${userId}`);
           return NextResponse.json(sales);
         } else if (config.type === 'postgresql') {
@@ -874,12 +970,9 @@ export async function GET(request: Request) {
           return NextResponse.json(product[0] || null);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const userId = getUserIdFromRequest(request);
-          if (!userId) return NextResponse.json(null);
-          const user = await db.collection('users').findOne({ userId }, { projection: { 'data.products': 1 } });
-          const products = Array.isArray(user?.data?.products) ? user.data.products : [];
-          const product = products.find((p: any) => p.id === id) || null;
-          return NextResponse.json(product);
+          const userId = getUserIdFromRequest(request) || 'local-user';
+          const product = await db.collection('products').findOne({ userId, id });
+          return NextResponse.json(product || null);
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;
           const product = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
@@ -1285,7 +1378,66 @@ export async function POST(request: Request) {
         try {
           if (config.type === 'mysql') {
             const pool = connection.connection as mysql.Pool;
-            const [result] = await pool.query(sql);
+
+            // Sanitize GROUP BY for ONLY_FULL_GROUP_BY compatibility (common patterns)
+            const sanitizeGroupByForMySQL = (originalSql: string): string => {
+              try {
+                let updated = originalSql;
+                const lower = originalSql.toLowerCase();
+
+                // Only attempt if query has GROUP BY
+                if (!/\bgroup\s+by\b/i.test(lower)) return originalSql;
+
+                // Helper to append a token to GROUP BY clause if missing
+                const ensureGroupByIncludes = (sqlText: string, token: string): string => {
+                  const groupByRegex = /group\s+by\s+([^;]+?)(\border\s+by\b|\blimit\b|$)/i;
+                  const m = groupByRegex.exec(sqlText);
+                  if (!m) return sqlText;
+                  const groupList = m[1];
+                  const tail = m[2] || '';
+                  const alreadyIncluded = new RegExp(`(^|,|\\s)${token}(,|\\s|$)`, 'i').test(groupList.trim());
+                  if (alreadyIncluded) return sqlText;
+                  const before = sqlText.slice(0, m.index);
+                  const after = sqlText.slice(m.index + m[0].length);
+                  const newGroupList = `${groupList.trim()}, ${token}`;
+                  const replacement = `GROUP BY ${newGroupList} ${tail}`.replace(/\s+$/,' ');
+                  return `${before}${replacement}${after}`;
+                };
+
+                // If MONTHNAME(date) is selected, ensure GROUP BY includes its alias or expression
+                const monthNameAliasMatch = /monthname\s*\(\s*date\s*\)\s*(as\s+(\w+))?/i.exec(updated);
+                if (monthNameAliasMatch) {
+                  const alias = monthNameAliasMatch[2];
+                  if (alias) {
+                    updated = ensureGroupByIncludes(updated, alias);
+                  } else {
+                    updated = ensureGroupByIncludes(updated, 'MONTHNAME(date)');
+                  }
+                }
+
+                // If DATE_FORMAT(date, '%M') present, ensure grouped
+                const dateFormatMonthMatch = /date_format\s*\(\s*date\s*,\s*'%M'\s*\)\s*(as\s+(\w+))?/i.exec(updated);
+                if (dateFormatMonthMatch) {
+                  const alias = dateFormatMonthMatch[2];
+                  if (alias) {
+                    updated = ensureGroupByIncludes(updated, alias);
+                  } else {
+                    updated = ensureGroupByIncludes(updated, "DATE_FORMAT(date, '%M')");
+                  }
+                }
+
+                return updated;
+              } catch {
+                return originalSql;
+              }
+            };
+
+            const safeSql = sanitizeGroupByForMySQL(sql);
+            if (safeSql !== sql) {
+              console.log('Rewrote SQL for ONLY_FULL_GROUP_BY compatibility:', safeSql);
+            }
+
+            const [result] = await pool.query(safeSql);
             console.log('SQL execution result:', result);
             return NextResponse.json({ 
               success: true, 
@@ -1293,12 +1445,137 @@ export async function POST(request: Request) {
               message: 'SQL query executed successfully'
             });
           } else if (config.type === 'mongodb') {
-            // For MongoDB, we would need to parse and execute the SQL-like query
-            // This is a simplified implementation
-            return NextResponse.json({ 
-              error: 'SQL execution not yet implemented for MongoDB',
-              message: 'Please use MySQL or PostgreSQL for SQL queries'
-            }, { status: 400 });
+            // Minimal SQL-to-Mongo mapping to support AI-generated mutations and simple selects
+            const db = connection.connection as Db;
+            const userId = getUserIdFromRequest(request);
+            if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
+
+            const normalized = String(sql).trim();
+            const isInsertSale = /^insert\s+into\s+sales/i.test(normalized);
+            const isInsertProduct = /^insert\s+into\s+products/i.test(normalized);
+            const isUpdateProduct = /^update\s+products\s+set/i.test(normalized);
+            const isDeleteProduct = /^delete\s+from\s+products/i.test(normalized);
+            const isSelectGroupByProductQty = /select[\s\S]*sum\(\s*quantity\s*\)[\s\S]*from\s+sales[\s\S]*group\s+by\s+productname/i.test(normalized);
+            const isSelectSumSales = /select\s+sum\(\s*total\s*\)\s+as\s+\w+\s+from\s+sales/i.test(normalized);
+
+            // Handle known modifications
+            if (isInsertSale) {
+              // Very lightweight parser: extract values (...) list
+              const valuesMatch = normalized.match(/values\s*\((.*)\)/i);
+              if (!valuesMatch) {
+                return NextResponse.json({ error: 'Unsupported SQL for MongoDB (INSERT syntax)' }, { status: 400 });
+              }
+              const raw = valuesMatch[1];
+              // Split by commas not in quotes (naive but works for our simple patterns)
+              const parts = raw.split(/,(?=(?:[^']*'[^']*')*[^']*$)/).map(s => s.trim().replace(/^'|'$/g, ''));
+              // Expected order: productId, productName, quantity, price, total, date, customer
+              const sale = {
+                id: crypto.randomUUID(),
+                productId: parts[0],
+                productName: parts[1],
+                quantity: Number(parts[2]) || 0,
+                price: Number(parts[3]) || 0,
+                total: Number(parts[4]) || 0,
+                date: parts[5] || new Date().toISOString(),
+                customer: parts[6] || ''
+              };
+              await db.collection('users').updateOne(
+                { userId },
+                { $push: { 'data.sales': sale } } as any
+              );
+              return NextResponse.json({ success: true, result: sale });
+            }
+
+            if (isInsertProduct) {
+              const valuesMatch = normalized.match(/values\s*\((.*)\)/i);
+              if (!valuesMatch) return NextResponse.json({ error: 'Unsupported SQL for MongoDB (INSERT syntax)' }, { status: 400 });
+              const raw = valuesMatch[1];
+              const parts = raw.split(/,(?=(?:[^']*'[^']*')*[^']*$)/).map(s => s.trim().replace(/^'|'$/g, ''));
+              const now = new Date().toISOString();
+              const product = {
+                id: crypto.randomUUID(),
+                name: parts[0],
+                description: parts[1] || '',
+                category: parts[2] || '',
+                price: Number(parts[3]) || 0,
+                stock: Number(parts[4]) || 0,
+                minStock: Number(parts[5]) || 0,
+                supplier: parts[6] || '',
+                createdAt: now,
+                updatedAt: now
+              };
+              await db.collection('users').updateOne(
+                { userId },
+                { $push: { 'data.products': product } } as any
+              );
+              return NextResponse.json({ success: true, result: product });
+            }
+
+            if (isUpdateProduct) {
+              // Expect: UPDATE products SET field = value, ... WHERE id = '...'
+              const whereMatch = normalized.match(/where\s+id\s*=\s*'([^']+)'/i);
+              const setMatch = normalized.match(/set\s+(.+)\s+where/i);
+              if (!whereMatch || !setMatch) return NextResponse.json({ error: 'Unsupported SQL for MongoDB (UPDATE syntax)' }, { status: 400 });
+              const id = whereMatch[1];
+              const assignments = setMatch[1].split(/,(?=(?:[^']*'[^']*')*[^']*$)/);
+              const setDoc: Record<string, any> = { 'data.products.$[p].updatedAt': new Date().toISOString() };
+              for (const a of assignments) {
+                const m = a.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)$/);
+                if (!m) continue;
+                const key = m[1];
+                let valueRaw = m[2].trim();
+                if (/^'/.test(valueRaw)) valueRaw = valueRaw.replace(/^'|'$/g, '');
+                const value = /^\d+(\.\d+)?$/.test(valueRaw) ? Number(valueRaw) : valueRaw;
+                setDoc[`data.products.$[p].${key}`] = value;
+              }
+              const result = await db.collection('users').updateOne(
+                { userId },
+                { $set: setDoc },
+                { arrayFilters: [{ 'p.id': id }] }
+              );
+              return NextResponse.json({ success: true, result });
+            }
+
+            if (isDeleteProduct) {
+              const whereMatch = normalized.match(/where\s+id\s*=\s*'([^']+)'/i);
+              if (!whereMatch) return NextResponse.json({ error: 'Unsupported SQL for MongoDB (DELETE syntax)' }, { status: 400 });
+              const id = whereMatch[1];
+              const result = await db.collection('users').updateOne(
+                { userId },
+                { $pull: { 'data.products': { id } } } as any
+              );
+              return NextResponse.json({ success: true, result });
+            }
+
+            if (isSelectGroupByProductQty) {
+              const user = await db.collection('users').findOne({ userId }, { projection: { 'data.sales': 1 } });
+              const rawSales = (user as any)?.data?.sales;
+              const sales: any[] = Array.isArray(rawSales) ? rawSales : [];
+              const map: Record<string, number> = {};
+              for (const s of sales) {
+                const key = s.productName || '';
+                map[key] = (map[key] || 0) + (Number(s.quantity) || 0);
+              }
+              // detect LIMIT n
+              let limit = 5;
+              const limitMatch = normalized.match(/limit\s+(\d+)/i);
+              if (limitMatch) limit = Math.max(1, parseInt(limitMatch[1], 10));
+              const rows = Object.entries(map)
+                .map(([productName, totalQuantity]) => ({ productName, totalQuantity }))
+                .sort((a, b) => (b.totalQuantity as number) - (a.totalQuantity as number))
+                .slice(0, limit);
+              return NextResponse.json(rows);
+            }
+
+            if (isSelectSumSales) {
+              const user = await db.collection('users').findOne({ userId }, { projection: { 'data.sales': 1 } });
+              const rawSales = (user as any)?.data?.sales;
+              const sales: any[] = Array.isArray(rawSales) ? rawSales : [];
+              const totalSales = sales.reduce((sum, s) => sum + (Number(s.total) || 0), 0);
+              return NextResponse.json([{ total_sales: totalSales }]);
+            }
+
+            return NextResponse.json({ error: 'Unsupported SQL for MongoDB' }, { status: 400 });
           } else if (config.type === 'postgresql') {
             const pool = connection.connection;
             const result = await pool.query(sql);
@@ -1331,8 +1608,7 @@ export async function POST(request: Request) {
           return NextResponse.json({ success: true, result });
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const userId = getUserIdFromRequest(request);
-          if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
+          const userId = getUserIdFromRequest(request) || 'local-user';
           const setDoc: Record<string, any> = {};
           for (const [k, v] of Object.entries(updateFields)) {
             setDoc[`data.products.$[p].${k}`] = v;
@@ -1345,6 +1621,63 @@ export async function POST(request: Request) {
           return NextResponse.json({ success: true, result });
         } else if (config.type === 'postgresql') {
           return NextResponse.json({ error: 'PostgreSQL update not implemented' }, { status: 400 });
+        }
+        break;
+      }
+
+      case 'delete-product': {
+        const body = await request.json();
+        const { productId } = body;
+
+        if (!productId) {
+          return NextResponse.json({ error: 'Product ID is required' }, { status: 400 });
+        }
+
+        if (config.type === 'mysql') {
+          const pool = connection.connection as mysql.Pool;
+          const [result] = await pool.query('DELETE FROM products WHERE id = ?', [productId]);
+          return NextResponse.json({ success: true, result });
+        } else if (config.type === 'mongodb') {
+          const db = connection.connection;
+          const userId = getUserIdFromRequest(request) || 'local-user';
+          const result = await db.collection('users').updateOne(
+            { userId },
+            { $pull: { 'data.products': { id: productId } } }
+          );
+          return NextResponse.json({ success: true, result });
+        } else if (config.type === 'postgresql') {
+          const pool = connection.connection;
+          const result = await pool.query('DELETE FROM products WHERE id = $1', [productId]);
+          return NextResponse.json({ success: true, result: result.rowCount });
+        }
+        break;
+      }
+
+      case 'update-stock': {
+        const body = await request.json();
+        const { productId, newStock } = body as { productId?: string; newStock?: number };
+
+        if (!productId || typeof newStock !== 'number') {
+          return NextResponse.json({ error: 'productId and newStock are required' }, { status: 400 });
+        }
+
+        if (config.type === 'mysql') {
+          const pool = connection.connection as mysql.Pool;
+          const [result] = await pool.query('UPDATE products SET stock = ?, updatedAt = NOW() WHERE id = ?', [newStock, productId]);
+          return NextResponse.json({ success: true, result });
+        } else if (config.type === 'mongodb') {
+          const db = connection.connection;
+          const userId = getUserIdFromRequest(request) || 'local-user';
+          const result = await db.collection('users').updateOne(
+            { userId },
+            { $set: { 'data.products.$[p].stock': newStock, 'data.products.$[p].updatedAt': new Date().toISOString() } },
+            { arrayFilters: [{ 'p.id': productId }] }
+          );
+          return NextResponse.json({ success: true, result });
+        } else if (config.type === 'postgresql') {
+          const pool = connection.connection;
+          const result = await pool.query('UPDATE products SET stock = $1, updated_at = NOW() WHERE id = $2', [newStock, productId]);
+          return NextResponse.json({ success: true, result: result.rowCount });
         }
         break;
       }
@@ -1390,8 +1723,7 @@ export async function POST(request: Request) {
           return NextResponse.json(result[0] || null);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const userId = getUserIdFromRequest(request);
-          if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
+          const userId = getUserIdFromRequest(request) || 'local-user';
           const key = settingData.setting_key;
           const setting = {
             ...settingData,
@@ -1464,8 +1796,7 @@ export async function POST(request: Request) {
           return NextResponse.json(result[0] || null);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const userId = getUserIdFromRequest(request);
-          if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
+          const userId = getUserIdFromRequest(request) || 'local-user';
           const key = settingData.setting_key;
           const update = {
             ...settingData,
@@ -1473,10 +1804,14 @@ export async function POST(request: Request) {
           };
           const result = await db.collection('users').findOneAndUpdate(
             { userId },
-            { $set: { [`data.settings.${key}`]: update } },
-            { returnDocument: 'after' }
+            { $set: { [`data.settings.${key}`]: update }, $setOnInsert: { userId } },
+            { returnDocument: 'after', upsert: true }
           );
-          const value = result.value?.data?.settings?.[key] || null;
+          if (!result.value) {
+            const doc = await db.collection('users').findOne({ userId }, { projection: { [`data.settings.${key}`]: 1 } });
+            return NextResponse.json((doc as any)?.data?.settings?.[key] || update);
+          }
+          const value = (result.value as any)?.data?.settings?.[key] || update;
           return NextResponse.json(value);
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;
@@ -1510,8 +1845,7 @@ export async function POST(request: Request) {
           await pool.query('DELETE FROM settings WHERE setting_key = ?', [setting_key]);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const userId = getUserIdFromRequest(request);
-          if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
+          const userId = getUserIdFromRequest(request) || 'local-user';
           await db.collection('users').updateOne(
             { userId },
             { $unset: { [`data.settings.${setting_key}`]: '' } }
@@ -1546,8 +1880,7 @@ export async function POST(request: Request) {
           return NextResponse.json(result[0]);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const userId = getUserIdFromRequest(request);
-          if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
+          const userId = getUserIdFromRequest(request) || 'local-user';
           const product = {
             id: productId,
             userId: userId,
@@ -1595,8 +1928,7 @@ export async function POST(request: Request) {
           return NextResponse.json(result[0]);
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
-          const userId = getUserIdFromRequest(request);
-          if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
+          const userId = getUserIdFromRequest(request) || 'local-user';
           const sale = {
             id: saleId,
             userId: userId,
@@ -1617,6 +1949,34 @@ export async function POST(request: Request) {
           
           const result = await pool.query('SELECT * FROM sales WHERE id = $1', [saleId]);
           return NextResponse.json(result.rows[0]);
+        }
+        break;
+      }
+      case 'delete-sale': {
+        console.log('Deleting sale...');
+        const { saleId } = await request.json();
+
+        if (!saleId) {
+          return NextResponse.json({ error: 'Sale ID is required' }, { status: 400 });
+        }
+
+        if (config.type === 'mysql') {
+          const pool = connection.connection as mysql.Pool;
+          const [result] = await pool.query('DELETE FROM sales WHERE id = ?', [saleId]);
+          return NextResponse.json({ success: true, result });
+        } else if (config.type === 'mongodb') {
+          const db = connection.connection;
+          const userId = getUserIdFromRequest(request);
+          if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
+          const result = await db.collection('users').updateOne(
+            { userId },
+            { $pull: { 'data.sales': { id: saleId } } }
+          );
+          return NextResponse.json({ success: true, result });
+        } else if (config.type === 'postgresql') {
+          const pool = connection.connection;
+          const result = await pool.query('DELETE FROM sales WHERE id = $1', [saleId]);
+          return NextResponse.json({ success: true, result: result.rowCount });
         }
         break;
       }

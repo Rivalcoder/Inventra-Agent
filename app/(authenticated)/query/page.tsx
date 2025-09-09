@@ -86,6 +86,7 @@ export default function QueryPage() {
       try {
         const dbConfig = JSON.parse(databaseConfig);
         headers['x-user-db-config'] = JSON.stringify(dbConfig);
+        if (dbConfig?.userId) headers['x-user-id'] = String(dbConfig.userId);
       } catch (error) {
         toast({
           title: "Invalid Database Configuration",
@@ -137,17 +138,17 @@ export default function QueryPage() {
           try {
             const execResult = await runSqlQuery(sql);
             if (/^insert/i.test(sql)) {
-              dbChangeMessages.push("Product added successfully.");
-              dbHeadline = "Product added successfully.";
+              dbChangeMessages.push("Insert executed successfully.");
+              dbHeadline = "Insert executed successfully.";
             } else if (/^update/i.test(sql)) {
-              dbChangeMessages.push("Product updated successfully.");
-              dbHeadline = "Product updated successfully.";
+              dbChangeMessages.push("Update executed successfully.");
+              dbHeadline = "Update executed successfully.";
             } else if (/^delete/i.test(sql)) {
-              dbChangeMessages.push("Product deleted successfully.");
-              dbHeadline = "Product deleted successfully.";
+              dbChangeMessages.push("Delete executed successfully.");
+              dbHeadline = "Delete executed successfully.";
             } else {
-              dbChangeMessages.push("Database updated successfully.");
-              dbHeadline = "Database updated successfully.";
+              dbChangeMessages.push("Query executed successfully.");
+              dbHeadline = "Query executed successfully.";
             }
             toast({
               title: "Database Updated",
