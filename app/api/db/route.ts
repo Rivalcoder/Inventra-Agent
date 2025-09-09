@@ -575,9 +575,14 @@ async function ensureMongoUserData(request: Request, config: DatabaseConfig) {
     }
   }
 
+  // Ensure there is a users document with embedded arrays
+  const existingUserDoc = await db.collection('users').findOne({ userId }, { projection: { _id: 1, 'data.products': 1, 'data.sales': 1 } });
+  const hasEmbeddedProducts = Array.isArray((existingUserDoc as any)?.data?.products) && ((existingUserDoc as any).data.products as any[]).length > 0;
+  const hasEmbeddedSales = Array.isArray((existingUserDoc as any)?.data?.sales) && ((existingUserDoc as any).data.sales as any[]).length > 0;
+
   const newProductsCount = await db.collection('products').countDocuments({ userId });
   const newSalesCount = await db.collection('sales').countDocuments({ userId });
-  if (newProductsCount > 0 && newSalesCount > 0) return;
+  if (hasEmbeddedProducts && hasEmbeddedSales) return;
 
   console.log(`Seeding Mongo user data for user: ${userId}`);
   const now = formatDateForMySQL(new Date());
@@ -611,12 +616,30 @@ async function ensureMongoUserData(request: Request, config: DatabaseConfig) {
     }
   }
 
-  if (newProductsCount === 0) {
-    await db.collection('products').insertMany(products.map(p => ({ ...p, userId })));
+  // Prefer populating embedded arrays on the user document. If collections already have per-user docs, use those to hydrate arrays.
+  let productsForUser: any[] = [];
+  let salesForUser: any[] = [];
+
+  if (newProductsCount > 0) {
+    productsForUser = await db.collection('products').find({ userId }).toArray();
+  } else {
+    // Do not write to the products collection to avoid unique index conflicts in local Mongo
+    productsForUser = products.map(p => ({ ...p, userId }));
   }
-  if (newSalesCount === 0) {
-    await db.collection('sales').insertMany(sales.map(s => ({ ...s, userId })));
+
+  if (newSalesCount > 0) {
+    salesForUser = await db.collection('sales').find({ userId }).toArray();
+  } else {
+    // Do not write to the sales collection to avoid unique index conflicts in local Mongo
+    salesForUser = sales.map(s => ({ ...s, userId }));
   }
+
+  // Upsert the user document with embedded arrays if missing or empty
+  await db.collection('users').updateOne(
+    { userId },
+    { $set: { 'data.products': productsForUser, 'data.sales': salesForUser } },
+    { upsert: true }
+  );
 }
 
 // API route handlers
@@ -685,8 +708,12 @@ export async function GET(request: Request) {
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
           const userId = getUserIdFromRequest(request) || 'local-user';
-          const products = await db.collection('products').find({ userId }).toArray();
-          const sales = await db.collection('sales').find({ userId }).toArray();
+          const user = await db.collection('users').findOne(
+            { userId },
+            { projection: { 'data.products': 1, 'data.sales': 1 } }
+          );
+          const products: any[] = Array.isArray((user as any)?.data?.products) ? (user as any).data.products : [];
+          const sales: any[] = Array.isArray((user as any)?.data?.sales) ? (user as any).data.sales : [];
           const stats = {
             totalSales: sales.length,
             totalQuantity: sales.reduce((sum: number, s: any) => sum + (Number(s.quantity) || 0), 0),
@@ -745,7 +772,11 @@ export async function GET(request: Request) {
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
           const userId = getUserIdFromRequest(request) || 'local-user';
-          const sales = await db.collection('sales').find({ userId }).toArray();
+          const user = await db.collection('users').findOne(
+            { userId },
+            { projection: { 'data.sales': 1 } }
+          );
+          const sales: any[] = Array.isArray((user as any)?.data?.sales) ? (user as any).data.sales : [];
           const since = Date.now() - 6 * 30 * 24 * 60 * 60 * 1000;
           const buckets = new Map<string, { month: string; revenue: number; quantity: number }>();
           for (const s of sales) {
@@ -792,7 +823,11 @@ export async function GET(request: Request) {
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
           const userId = getUserIdFromRequest(request) || 'local-user';
-          const products = await db.collection('products').find({ userId }).toArray();
+          const user = await db.collection('users').findOne(
+            { userId },
+            { projection: { 'data.products': 1 } }
+          );
+          const products: any[] = Array.isArray((user as any)?.data?.products) ? (user as any).data.products : [];
           const lowStock = products
             .filter((p: any) => (Number(p.stock) || 0) <= (Number(p.minStock) || 0))
             .map((p: any) => ({ ...p, stockRatio: (Number(p.minStock) || 0) === 0 ? Infinity : (Number(p.stock) || 0) / (Number(p.minStock) || 0) }))
@@ -830,8 +865,12 @@ export async function GET(request: Request) {
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
           const userId = getUserIdFromRequest(request) || 'local-user';
-          const products = await db.collection('products').find({ userId }).toArray();
-          const sales = await db.collection('sales').find({ userId }).toArray();
+          const user = await db.collection('users').findOne(
+            { userId },
+            { projection: { 'data.products': 1, 'data.sales': 1 } }
+          );
+          const products: any[] = Array.isArray((user as any)?.data?.products) ? (user as any).data.products : [];
+          const sales: any[] = Array.isArray((user as any)?.data?.sales) ? (user as any).data.sales : [];
           const revenueByProduct = new Map<string, { revenue: number; sales: number }>();
           for (const s of sales) {
             const entry = revenueByProduct.get(s.productId) || { revenue: 0, sales: 0 };
@@ -878,7 +917,11 @@ export async function GET(request: Request) {
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
           const userId = getUserIdFromRequest(request) || 'local-user';
-          const sales = await db.collection('sales').find({ userId }).toArray();
+          const user = await db.collection('users').findOne(
+            { userId },
+            { projection: { 'data.sales': 1 } }
+          );
+          const sales: any[] = Array.isArray((user as any)?.data?.sales) ? (user as any).data.sales : [];
           const recent = sales
             .slice()
             .sort((a: any, b: any) => new Date(b.date || b.saleDate).getTime() - new Date(a.date || a.saleDate).getTime())
@@ -906,7 +949,12 @@ export async function GET(request: Request) {
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
           const userId = getUserIdFromRequest(request) || 'local-user';
-          const products = await db.collection('products').find({ userId }).toArray();
+          // Read products from the user's embedded document to match where writes go
+          const user = await db.collection('users').findOne(
+            { userId },
+            { projection: { 'data.products': 1 } }
+          );
+          const products = Array.isArray((user as any)?.data?.products) ? (user as any).data.products : [];
           console.log(`Found ${products.length} products for user: ${userId}`);
           return NextResponse.json(products);
         } else if (config.type === 'postgresql') {
@@ -937,7 +985,11 @@ export async function GET(request: Request) {
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
           const userId = getUserIdFromRequest(request) || 'local-user';
-          const sales = await db.collection('sales').find({ userId }).toArray();
+          const user = await db.collection('users').findOne(
+            { userId },
+            { projection: { 'data.sales': 1 } }
+          );
+          const sales: any[] = Array.isArray((user as any)?.data?.sales) ? (user as any).data.sales : [];
           console.log(`Found ${sales.length} sales for user: ${userId}`);
           return NextResponse.json(sales);
         } else if (config.type === 'postgresql') {
@@ -971,8 +1023,13 @@ export async function GET(request: Request) {
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
           const userId = getUserIdFromRequest(request) || 'local-user';
-          const product = await db.collection('products').findOne({ userId, id });
-          return NextResponse.json(product || null);
+          const user = await db.collection('users').findOne(
+            { userId },
+            { projection: { 'data.products': 1 } }
+          );
+          const products = Array.isArray((user as any)?.data?.products) ? (user as any).data.products : [];
+          const product = products.find((p: any) => p.id === id) || null;
+          return NextResponse.json(product);
         } else if (config.type === 'postgresql') {
           const pool = connection.connection;
           const product = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
