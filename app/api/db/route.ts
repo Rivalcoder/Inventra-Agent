@@ -74,6 +74,28 @@ async function getDatabaseConfig(request: Request): Promise<DatabaseConfig> {
     const userConfig = request.headers.get('x-user-db-config');
     if (userConfig) {
       const config = JSON.parse(userConfig);
+      
+      // For MongoDB, if user config has empty credentials, use environment variables
+      if (config.type === 'mongodb' && (!config.username || !config.password)) {
+        console.log('User config has empty MongoDB credentials, using environment variables');
+        if (process.env.DB_USERNAME && process.env.DB_PASSWORD && process.env.DB_HOST) {
+          return {
+            type: 'mongodb',
+            host: process.env.DB_HOST,
+            port: 27017,
+            username: process.env.DB_USERNAME,
+            password: process.env.DB_PASSWORD,
+            database: process.env.MONGODB_DATABASE || 'ai_inventory',
+            userId: config.userId, // Preserve userId from user config
+            options: {
+              ssl: true,
+              connectionLimit: 10,
+              charset: 'utf8'
+            }
+          };
+        }
+      }
+      
       if (config.type === 'mysql') {
         const masked = typeof config.password === 'string' ? (config.password.length > 0 ? `${config.password[0]}***(${config.password.length})` : '(empty)') : '(unset)';
         console.log('Resolved DB Config from Header (MySQL):', { host: config.host, port: config.port, username: config.username, password: masked, database: config.database });

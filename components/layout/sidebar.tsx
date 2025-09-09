@@ -88,7 +88,7 @@ export default function Sidebar({ mobile = false, open = false, onOpenChange }: 
 
   // Sidebar content
   const sidebarContent = (
-    <div className={cn("flex flex-col h-full", isCollapsed ? "items-center" : "")}>  
+    <div className={cn("flex flex-col h-screen", isCollapsed ? "items-center" : "")}>  
       {/* Collapse button (desktop only, now at the top) */}
       {!mobile && (
         <div className="flex items-center justify-end border-b px-3 h-14 w-full">
