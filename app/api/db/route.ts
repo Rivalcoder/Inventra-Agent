@@ -74,26 +74,37 @@ async function getDatabaseConfig(request: Request): Promise<DatabaseConfig> {
     const userConfig = request.headers.get('x-user-db-config');
     if (userConfig) {
       const config = JSON.parse(userConfig);
-      
-      // For MongoDB, if user config has empty credentials, use environment variables
-      if (config.type === 'mongodb' && (!config.username || !config.password)) {
-        console.log('User config has empty MongoDB credentials, using environment variables');
-        if (process.env.DB_USERNAME && process.env.DB_PASSWORD && process.env.DB_HOST) {
-          return {
-            type: 'mongodb',
-            host: process.env.DB_HOST,
-            port: 27017,
-            username: process.env.DB_USERNAME,
-            password: process.env.DB_PASSWORD,
-            database: process.env.MONGODB_DATABASE || 'ai_inventory',
-            userId: config.userId, // Preserve userId from user config
-            options: {
-              ssl: true,
-              connectionLimit: 10,
-              charset: 'utf8'
-            }
-          };
-        }
+
+      // If we have secure MongoDB env credentials, prefer them over any unsafe/empty header configs
+      const hasEnvMongo = Boolean(process.env.DB_USERNAME && process.env.DB_PASSWORD && process.env.DB_HOST);
+
+      // Validate header config safety
+      const isMongo = config?.type === 'mongodb';
+      const headerUser: unknown = config?.username;
+      const headerPass: unknown = config?.password;
+      const headerHost: unknown = config?.host;
+
+      const headerUserEmpty = !headerUser || typeof headerUser !== 'string' || headerUser.trim().length === 0 || headerUser === 'port';
+      const headerPassEmpty = !headerPass || typeof headerPass !== 'string' || (headerPass as string).trim().length === 0 || headerPass === 'NOT SET';
+      const headerPassHasEmailDomain = typeof headerPass === 'string' && (headerPass.includes('gmail.com') || headerPass.includes('yahoo.com') || headerPass.includes('hotmail.com'));
+      const headerHostInvalid = !headerHost || typeof headerHost !== 'string' || (headerHost as string).includes('gmail.com') || (headerHost as string).includes('yahoo.com') || (headerHost as string).includes('hotmail.com');
+
+      // If header requests MySQL or has unsafe Mongo creds, and env mongo exists, use env mongo
+      if (hasEnvMongo && (!isMongo || headerUserEmpty || headerPassEmpty || headerPassHasEmailDomain || headerHostInvalid)) {
+        console.log('Using MongoDB Atlas configuration from environment variables (overriding unsafe header config)');
+        return {
+          type: 'mongodb',
+          host: process.env.DB_HOST as string,
+          port: 27017,
+          username: process.env.DB_USERNAME as string,
+          password: process.env.DB_PASSWORD as string,
+          database: process.env.MONGODB_DATABASE || 'ai_inventory',
+          options: {
+            ssl: true,
+            connectionLimit: 10,
+            charset: 'utf8'
+          }
+        } as DatabaseConfig;
       }
       
       if (config.type === 'mysql') {
