@@ -1604,7 +1604,17 @@ export async function POST(request: Request) {
 
         if (config.type === 'mysql') {
           const pool = connection.connection as mysql.Pool;
-          const [result] = await pool.query('UPDATE products SET ? WHERE id = ?', [updateFields, id]);
+          // Sanitize and format fields for MySQL
+          const fields: Record<string, any> = { ...updateFields };
+          // Never update createdAt on edit; MySQL DATETIME may also reject ISO with Z
+          if (Object.prototype.hasOwnProperty.call(fields, 'createdAt')) {
+            delete fields.createdAt;
+          }
+          // Ensure updatedAt is a MySQL DATETIME string
+          const newUpdatedAt = fields.updatedAt ?? new Date();
+          fields.updatedAt = formatDateForMySQL(newUpdatedAt);
+
+          const [result] = await pool.query('UPDATE products SET ? WHERE id = ?', [fields, id]);
           return NextResponse.json({ success: true, result });
         } else if (config.type === 'mongodb') {
           const db = connection.connection;
