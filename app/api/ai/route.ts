@@ -135,7 +135,7 @@ export async function POST(req: Request) {
     // Fetch all relevant data with database configuration
     const { products, sales, stats, topProducts, lowStock } = await fetchDataWithConfig(dbConfig, req);
 
-    // Prepare the context with current data and current datetime
+    // Prepare the context with current data, current datetime, and DB schema hints
     const now = new Date();
     const context = {
       products,
@@ -143,7 +143,8 @@ export async function POST(req: Request) {
       stats,
       topProducts,
       lowStock,
-      now: formatDateForMySQL(now) // Pass current datetime in MySQL format
+      now: formatDateForMySQL(now), // Pass current datetime in MySQL format
+      dbType: (dbConfig?.type || 'mysql')
     };
     console.log('API Key available:', process.env.GOOGLE_GENERATIVE_AI_API_KEY); 
     
@@ -162,12 +163,21 @@ export async function POST(req: Request) {
     try {
       console.log('Attempting to generate AI response...');
       const { object } = await generateObject({
-        model: google('gemini-2.0-flash-exp'),
+        model: google('gemini-2.5-flash-lite'),
         schema: z.object({
           Topic: z.object({
             Heading: z.string(),
             Description: z.string(),
+            Language: z.enum(['sql', 'mongodb']).optional(),
+            // Prefer a structured array of commands when multiple ops are needed
             SqlQuery: z.array(z.string()).optional(),
+            MongoQuery: z.array(z.string()).optional(),
+            Steps: z.array(z.object({
+              Action: z.string(),
+              Sql: z.string().optional(),
+              Mongo: z.string().optional(),
+              Note: z.string().optional(),
+            })).optional(),
           }),
         }),
         prompt: `Analyze the following inventory and sales data:
@@ -176,10 +186,22 @@ export async function POST(req: Request) {
                 User Query: ${query}
                 
                 # IMPORTANT:
+                - Database Type: ${dbConfig?.type || 'mysql'}
+                - If Database Type is 'mongodb':
+                  * You MUST set Topic.Language to 'mongodb'
+                  * You MUST provide only MongoDB shell style commands in Topic.MongoQuery (e.g., db.sales.find({...}), db.products.updateOne({...},{...}), db.sales.aggregate([...]))
+                  * You MUST NOT provide Topic.SqlQuery in this case
+                - If Database Type is 'mysql' or 'postgresql':
+                  * You MUST set Topic.Language to 'sql' and only provide Topic.SqlQuery
                 - For any date or datetime fields in SQL that should represent the current time, always use the provided value in the 'now' variable (e.g., ${context.now}).
                 - Do NOT include the SQL query in the Heading or Description fields.
-                - Only provide the SQL query in the SqlQuery field of the response.
-                - For any data modification (add, update, delete) that requires multiple SQL statements (e.g., insert sale and update stock), return each statement as a separate string in the SqlQuery array, in the correct order. NEVER combine multiple SQL statements in a single string. Each string in the SqlQuery array must contain only one complete SQL statement.
+                - Only provide the query in the correct field based on Language/Database Type:
+                  * For SQL (mysql/postgresql): provide statements in SqlQuery
+                  * For MongoDB: provide shell commands in MongoQuery
+                - For any data modification (add, update, delete) that requires multiple statements:
+                  * If SQL DB: return each statement as a separate string in SqlQuery
+                  * If MongoDB: return each command as a separate string in MongoQuery
+                  * Additionally, include an ordered Steps array with Action and the corresponding command (Sql or Mongo) for reliability
                 - If the customer name is not provided in the user query, use 'Anonymous' as the customer name in the SQL statement.
                 - For any date or datetime fields in SQL, always use the MySQL DATETIME format: 'YYYY-MM-DD HH:MM:SS'. Do NOT use ISO format (no 'T' or 'Z').
                 - When generating multiple SQL queries, ensure that if any query fails, the subsequent queries should NOT be executed (simulate transactional behavior). If a failure is likely (e.g., not enough stock), explain the reason in the Description and do NOT generate the SQL queries.
@@ -219,14 +241,19 @@ export async function POST(req: Request) {
                     - Keep the response concise and relevant
                     - Use markdown formatting for better presentation
                     
-                3). SqlQuery (Optional):
+                3). Query Fields (Optional):
                     - Only provide if all necessary information is available
-                    - For data modifications (add/update/delete), include the complete SQL query
-                    - For data queries, include the SELECT query to get the requested information
-                    - Format SQL queries in code blocks with \`\`\`sql
-                    - Add comments to explain complex queries
-                    - if any Customer Name Is Not Provided In The User Query Use 'Anonymous' As The Customer Name In The SQL Statement DOnt ask And Other Important Details ask And Also Get from Db references
-                    - Ensure GROUP BY queries are compatible with MySQL ONLY_FULL_GROUP_BY mode by grouping all non-aggregated columns used in SELECT and ORDER BY.
+                    - For SQL databases:
+                      * Include complete SQL statements in SqlQuery
+                      * Format SQL queries in code blocks with \`\`\`sql
+                      * Add comments to explain complex queries
+                      * Ensure GROUP BY queries are compatible with MySQL ONLY_FULL_GROUP_BY mode by grouping all non-aggregated columns used in SELECT and ORDER BY.
+                    - For MongoDB databases:
+                      * Include Mongo shell commands in MongoQuery (each string one command), and optionally in Steps[].Mongo
+                      * Use db.<collection>.find, insertOne, updateOne, deleteOne, or aggregate with proper pipelines
+                      * Prefer updateOne filters by id or by name for products
+                      * Avoid using $lookup across top-level collections; prefer computing results from embedded arrays (users.data.products and users.data.sales) when applicable
+                      * Do not include SQL
 
                 Important Notes:
                 - Be flexible in your response format based on the query type
@@ -410,6 +437,27 @@ export async function POST(req: Request) {
         object.Topic.Heading = "No Data Found";
         object.Topic.Description = "No sales data found for the selected period.";
       }
+
+      // Enforce language/fields based on configured DB type
+      try {
+        const dbType = (dbConfig?.type || '').toLowerCase();
+        if (dbType === 'mongodb') {
+          if (object?.Topic) {
+            object.Topic.Language = 'mongodb' as any;
+            // If AI returned SQL by mistake, drop it to avoid confusion
+            if (Array.isArray(object.Topic.SqlQuery)) {
+              object.Topic.SqlQuery = [];
+            }
+          }
+        } else {
+          if (object?.Topic) {
+            object.Topic.Language = 'sql' as any;
+            if (Array.isArray(object.Topic.MongoQuery)) {
+              object.Topic.MongoQuery = [];
+            }
+          }
+        }
+      } catch {}
 
       console.log('Successfully generated AI response');
       return NextResponse.json({ 

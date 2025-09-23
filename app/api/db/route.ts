@@ -1422,6 +1422,400 @@ export async function POST(request: Request) {
     const connection = await dbService.connect(config);
 
     switch (action) {
+      case 'run-mongo': {
+        if (config.type !== 'mongodb') {
+          return NextResponse.json({ error: 'MongoDB not active for current configuration' }, { status: 400 });
+        }
+        const db = connection.connection as Db;
+        const userId = getUserIdFromRequest(request) || 'local-user';
+        if (!userId) return NextResponse.json({ error: 'No user' }, { status: 400 });
+
+        const body = await request.json();
+        const commandsInput: unknown = body?.commands ?? body?.command;
+        const commands: string[] = Array.isArray(commandsInput)
+          ? commandsInput.map((c: any) => String(c))
+          : (commandsInput ? [String(commandsInput)] : []);
+        if (!commands.length) {
+          return NextResponse.json({ error: 'Mongo command(s) required' }, { status: 400 });
+        }
+
+        const results: any[] = [];
+
+        // Join fragmented commands (e.g., each line of an aggregate provided as a separate string)
+        const flattened: string[] = [];
+        let buffer = '';
+        let depthCount = 0;
+        const pushBufferIfReady = () => {
+          const trimmed = buffer.trim();
+          if (trimmed) flattened.push(trimmed);
+          buffer = '';
+          depthCount = 0;
+        };
+        for (const fragRaw of commands) {
+          const frag = String(fragRaw);
+          // Count parentheses/brackets to detect completion
+          for (let i = 0; i < frag.length; i++) {
+            const ch = frag[i];
+            if (ch === '(' || ch === '[') depthCount++;
+            if (ch === ')' || ch === ']') depthCount = Math.max(0, depthCount - 1);
+          }
+          buffer += (buffer ? '\n' : '') + frag;
+          if (depthCount === 0 && /\)\s*;?$/.test(frag.trim())) {
+            pushBufferIfReady();
+          }
+        }
+        if (buffer.trim()) pushBufferIfReady();
+        const normalizedCommands = flattened.length ? flattened : commands.map(String);
+
+        // Helpers
+        const parseJsonArg = (text: string): any => {
+          if (!text || typeof text !== 'string') return null;
+          const direct = text.trim();
+          try { return JSON.parse(direct); } catch {}
+          try {
+            // Tolerate Mongo shell syntax: single quotes and unquoted keys
+            // 1) Replace single-quoted strings with double quotes (handle escapes)
+            let normalized = direct.replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, '"$1"');
+            // 2) Quote unquoted object keys (including $-prefixed like $set)
+            normalized = normalized.replace(/([\{,]\s*)([$A-Za-z_][A-Za-z0-9_$]*)\s*:/g, '$1"$2":');
+            // 3) Convert new Date(...) and ISODate(...) to ISO string literals
+            normalized = normalized.replace(/new\s+Date\s*\(([^)]*)\)/g, (_m, g1) => {
+              const arg = String(g1 || '').trim();
+              if (!arg) return '"' + new Date().toISOString() + '"';
+              const m = arg.match(/^"([^"]+)"$/);
+              if (m) {
+                const d = new Date(m[1]);
+                return '"' + (isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString()) + '"';
+              }
+              const d = new Date(arg);
+              return '"' + (isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString()) + '"';
+            });
+            normalized = normalized.replace(/ISODate\s*\(([^)]*)\)/gi, (_m, g1) => {
+              const arg = String(g1 || '').trim();
+              const m = arg.match(/^['"]([^'"]+)['"]$/);
+              if (m) {
+                const d = new Date(m[1]);
+                return '"' + (isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString()) + '"';
+              }
+              return '"' + new Date().toISOString() + '"';
+            });
+            // 4) Remove trailing commas
+            normalized = normalized.replace(/,\s*([}\]])/g, '$1');
+            return JSON.parse(normalized);
+          } catch {}
+          return null;
+        };
+        const extractArgs = (cmd: string): { coll: 'products'|'sales'|null; op: string; arg1?: string; arg2?: string } => {
+          let m = cmd.match(/^db\.(products|sales)\.(\w+)\s*\(([\s\S]*)\)\s*;?$/i);
+          if (!m) {
+            // Fallback: manual parse for multiline/extra whitespace cases
+            const start = cmd.indexOf('db.');
+            const firstParen = cmd.indexOf('(');
+            const lastParen = cmd.lastIndexOf(')');
+            if (start !== -1 && firstParen > start && lastParen > firstParen) {
+              const head = cmd.slice(start + 3, firstParen); // after 'db.' up to '('
+              const dotIdx = head.indexOf('.');
+              if (dotIdx !== -1) {
+                const collName = head.slice(0, dotIdx).trim();
+                const opName = head.slice(dotIdx + 1).trim();
+                const innerAlt = cmd.slice(firstParen + 1, lastParen).trim();
+                if ((collName === 'products' || collName === 'sales') && opName) {
+                  m = [cmd, collName, opName, innerAlt] as any;
+                }
+              }
+            }
+          }
+          if (!m) return { coll: null, op: '' } as any;
+          const coll = (m[1] as string).toLowerCase() as 'products'|'sales';
+          const op = m[2];
+          const inner = m[3].trim();
+          // split top-level args by comma (not inside braces/brackets)
+          const parts: string[] = [];
+          let depth = 0, current = '';
+          for (let i = 0; i < inner.length; i++) {
+            const ch = inner[i];
+            if (ch === '{' || ch === '[') depth++;
+            if (ch === '}' || ch === ']') depth = Math.max(0, depth - 1);
+            if (ch === ',' && depth === 0) { parts.push(current.trim()); current = ''; continue; }
+            current += ch;
+          }
+          if (current.trim().length) parts.push(current.trim());
+          return { coll, op, arg1: parts[0], arg2: parts[1] };
+        };
+
+        try {
+          for (const rawCmd of normalizedCommands) {
+            // Sanitize trailing helpers like .pretty() / .toArray() and ending semicolons
+            const cmd = String(rawCmd)
+              .trim()
+              .replace(/```/g, '')
+              .replace(/\.(pretty|toArray)\(\)\s*;?$/i, '')
+              .trim();
+            const { coll, op, arg1, arg2 } = extractArgs(cmd);
+            if (!coll) {
+              return NextResponse.json({ error: `Unsupported command: ${cmd}` }, { status: 400 });
+            }
+
+            if (/^find$/i.test(op)) {
+              const filter = arg1 ? parseJsonArg(arg1) : {};
+              const user = await db.collection('users').findOne({ userId }, { projection: { [`data.${coll}`]: 1 } });
+              const arr: any[] = Array.isArray((user as any)?.data?.[coll]) ? (user as any).data[coll] : [];
+              const eqFilter = (doc: any) => {
+                if (!filter || typeof filter !== 'object') return true;
+                return Object.entries(filter).every(([k, v]) => String((doc as any)[k]) === String(v as any));
+              };
+              const found = arr.filter(eqFilter);
+              results.push(found);
+              continue;
+            }
+
+            if (/^insertOne$/i.test(op)) {
+              const rawDoc = arg1 ? parseJsonArg(arg1) : null;
+              if (!rawDoc || typeof rawDoc !== 'object') {
+                return NextResponse.json({ error: `Invalid insertOne document for ${coll}` }, { status: 400 });
+              }
+              const nowIso = new Date().toISOString();
+              if (coll === 'sales') {
+                const sale: any = {
+                  id: rawDoc.id || crypto.randomUUID(),
+                  productId: rawDoc.productId || rawDoc.product_id || '',
+                  productName: rawDoc.productName || rawDoc.product_name || '',
+                  quantity: Number(rawDoc.quantity) || 0,
+                  price: Number(rawDoc.price) || 0,
+                  total: Number(rawDoc.total) || ((Number(rawDoc.price) || 0) * (Number(rawDoc.quantity) || 0)),
+                  date: rawDoc.saleDate || rawDoc.date || nowIso,
+                  customer: rawDoc.customer || rawDoc.customerName || '',
+                };
+                await db.collection('users').updateOne(
+                  { userId },
+                  { $push: { 'data.sales': sale } } as any
+                );
+                results.push({ acknowledged: true, insertedId: sale.id });
+                continue;
+              }
+              if (coll === 'products') {
+                const product: any = {
+                  id: rawDoc.id || crypto.randomUUID(),
+                  name: rawDoc.name || rawDoc.productName || '',
+                  description: rawDoc.description || '',
+                  category: rawDoc.category || '',
+                  price: Number(rawDoc.price) || 0,
+                  stock: Number(rawDoc.stock) || 0,
+                  minStock: Number(rawDoc.minStock) || 0,
+                  supplier: rawDoc.supplier || '',
+                  createdAt: rawDoc.createdAt || nowIso,
+                  updatedAt: rawDoc.updatedAt || nowIso,
+                };
+                await db.collection('users').updateOne(
+                  { userId },
+                  { $push: { 'data.products': product } } as any
+                );
+                results.push({ acknowledged: true, insertedId: product.id });
+                continue;
+              }
+              const toInsert = { id: rawDoc.id || crypto.randomUUID(), ...rawDoc };
+              await db.collection('users').updateOne(
+                { userId },
+                { $push: { [`data.${coll}`]: toInsert } } as any
+              );
+              results.push({ acknowledged: true, insertedId: toInsert.id });
+              continue;
+            }
+
+            if (/^updateOne$/i.test(op)) {
+              const filter = arg1 ? parseJsonArg(arg1) : null;
+              const update = arg2 ? parseJsonArg(arg2) : null;
+              let effectiveFilter: any = (filter && typeof filter === 'object') ? filter : null;
+              let effectiveUpdate: any = (update && typeof update === 'object') ? update : null;
+
+              // Fallback parser for shell-style updateOne when JSON parse fails
+              if (!effectiveFilter || !effectiveUpdate) {
+                try {
+                  const m = cmd.match(/updateOne\s*\(\s*(\{[\s\S]*?\})\s*,\s*(\{[\s\S]*?\})\s*\)\s*;?$/i);
+                  if (m) {
+                    const f = parseJsonArg(m[1]);
+                    const u = parseJsonArg(m[2]);
+                    if (f && u) {
+                      effectiveFilter = f;
+                      effectiveUpdate = u;
+                    }
+                  }
+                } catch {}
+              }
+              if (!effectiveFilter || !effectiveUpdate) {
+                return NextResponse.json({ error: `Invalid updateOne arguments for ${coll}`, details: { cmd, arg1, arg2 } }, { status: 400 });
+              }
+              // Support {$set: { ... }} with equality by id or name (for products)
+              const id = (effectiveFilter as any).id;
+              const name = (effectiveFilter as any).name;
+              if (!id && !(coll === 'products' && typeof name === 'string' && name)) {
+                return NextResponse.json({ error: 'updateOne supports filter by id, or by name for products', details: { filter: effectiveFilter } }, { status: 400 });
+              }
+              const setDoc: Record<string, any> = {};
+              const incDoc: Record<string, number> = {};
+              if (effectiveUpdate.$set && typeof effectiveUpdate.$set === 'object') {
+                for (const [k, v] of Object.entries(effectiveUpdate.$set)) {
+                  let value: any = v;
+                  if (k === 'price' || k === 'stock' || k === 'minStock' || k === 'quantity' || k === 'total') {
+                    const num = Number(v as any);
+                    if (!Number.isNaN(num)) value = num;
+                  }
+                  setDoc[`data.${coll}.$[e].${k}`] = value;
+                }
+              }
+              // Support $inc for numeric adjustments (e.g., stock)
+              if (effectiveUpdate.$inc && typeof effectiveUpdate.$inc === 'object') {
+                for (const [k, v] of Object.entries(effectiveUpdate.$inc)) {
+                  const num = Number(v as any);
+                  if (!Number.isNaN(num)) {
+                    incDoc[`data.${coll}.$[e].${k}`] = num;
+                  }
+                }
+              }
+              // Always bump updatedAt via $set
+              setDoc[`data.${coll}.$[e].updatedAt`] = new Date().toISOString();
+              const arrayFilter = id ? { 'e.id': id } : { 'e.name': name };
+              const updateOps: any = {};
+              if (Object.keys(setDoc).length > 0) updateOps.$set = setDoc;
+              if (Object.keys(incDoc).length > 0) updateOps.$inc = incDoc;
+              const res = await db.collection('users').updateOne(
+                { userId },
+                updateOps,
+                { arrayFilters: [arrayFilter] as any }
+              );
+              results.push({ matchedCount: (res as any).matchedCount, modifiedCount: (res as any).modifiedCount });
+              continue;
+            }
+
+            if (/^deleteOne$/i.test(op)) {
+              const filter = arg1 ? parseJsonArg(arg1) : null;
+              const id = filter?.id;
+              if (!id) {
+                return NextResponse.json({ error: 'deleteOne only supports filter by id' }, { status: 400 });
+              }
+              const res = await db.collection('users').updateOne(
+                { userId },
+                { $pull: { [`data.${coll}`]: { id } } } as any
+              );
+              results.push(res);
+              continue;
+            }
+
+            // Basic aggregate support for common AI-generated pattern on products
+            if (/^aggregate$/i.test(op) && coll === 'products') {
+              const pipelineText = arg1 || '';
+              // Try to detect optional $limit from the pipeline text
+              let limit = 5;
+              const limitMatch = /\$limit\s*:\s*(\d+)/i.exec(pipelineText);
+              if (limitMatch) {
+                const n = parseInt(limitMatch[1], 10);
+                if (!isNaN(n) && n > 0) limit = n;
+              }
+              // Compute top products by revenue and sales from embedded arrays
+              const user = await db.collection('users').findOne(
+                { userId },
+                { projection: { 'data.products': 1, 'data.sales': 1 } }
+              );
+              const products: any[] = Array.isArray((user as any)?.data?.products) ? (user as any).data.products : [];
+              const sales: any[] = Array.isArray((user as any)?.data?.sales) ? (user as any).data.sales : [];
+              const revenueByProduct = new Map<string, { revenue: number; sales: number }>();
+              for (const s of sales) {
+                if (!s || !s.productId) continue;
+                const entry = revenueByProduct.get(s.productId) || { revenue: 0, sales: 0 };
+                entry.sales += 1;
+                entry.revenue += Number(s.total) || ((Number(s.price) || 0) * (Number(s.quantity) || 0));
+                revenueByProduct.set(s.productId, entry);
+              }
+              const enriched = products.map((p: any) => {
+                const agg = revenueByProduct.get(p.id) || { revenue: 0, sales: 0 };
+                return { ...p, revenue: agg.revenue, sales: agg.sales };
+              })
+              .sort((a: any, b: any) => (Number(b.revenue) || 0) - (Number(a.revenue) || 0))
+              .slice(0, limit);
+              results.push(enriched);
+              continue;
+            }
+
+            // Basic aggregate support for common AI-generated pattern on sales
+            if (/^aggregate$/i.test(op) && coll === 'sales') {
+              const pipelineText = arg1 || '';
+              // Detect $limit and $sort on totalRevenue
+              let limit = 5;
+              const limitMatch = /\$limit\s*:\s*(\d+)/i.exec(pipelineText);
+              if (limitMatch) {
+                const n = parseInt(limitMatch[1], 10);
+                if (!isNaN(n) && n > 0) limit = n;
+              }
+              // Read embedded arrays
+              const user = await db.collection('users').findOne(
+                { userId },
+                { projection: { 'data.products': 1, 'data.sales': 1 } }
+              );
+              const products: any[] = Array.isArray((user as any)?.data?.products) ? (user as any).data.products : [];
+              const sales: any[] = Array.isArray((user as any)?.data?.sales) ? (user as any).data.sales : [];
+              // Determine grouping key: productId (default) or productName if pipeline refers to it
+              const groupByName = /\$group[\s\S]*?_id\s*:\s*(['"])\$productName\1/i.test(pipelineText);
+              let rows: Array<{ productId?: string; productName: string; totalRevenue: number; totalSales: number }>;
+              if (!groupByName) {
+                // Group by productId (default)
+                const byProduct: Map<string, { productId: string; totalRevenue: number; totalSales: number }> = new Map();
+                for (const s of sales) {
+                  const pid = s?.productId;
+                  if (!pid) continue;
+                  const entry = byProduct.get(pid) || { productId: pid, totalRevenue: 0, totalSales: 0 };
+                  const line = Number(s.total) || ((Number(s.price) || 0) * (Number(s.quantity) || 0));
+                  entry.totalRevenue += line;
+                  // totalSales as count or quantity? Prefer quantity if pipeline uses $sum: "$quantity"
+                  const sumQtyRequested = /\$group[\s\S]*?\$sum\s*:\s*(['"])\$quantity\1/i.test(pipelineText);
+                  entry.totalSales += sumQtyRequested ? (Number(s.quantity) || 0) : 1;
+                  byProduct.set(pid, entry);
+                }
+                const nameById = new Map<string, string>();
+                for (const p of products) {
+                  if (p && typeof p.id === 'string') nameById.set(p.id, p.name || '');
+                }
+                rows = Array.from(byProduct.values()).map(r => ({
+                  productId: r.productId,
+                  productName: nameById.get(r.productId) || '',
+                  totalRevenue: r.totalRevenue,
+                  totalSales: r.totalSales
+                }));
+              } else {
+                // Group by productName (no join)
+                const byName: Map<string, { productName: string; totalRevenue: number; totalSales: number }> = new Map();
+                const sumQtyRequested = /\$group[\s\S]*?\$sum\s*:\s*(['"])\$quantity\1/i.test(pipelineText);
+                for (const s of sales) {
+                  const name = s?.productName || '';
+                  if (!name) continue;
+                  const entry = byName.get(name) || { productName: name, totalRevenue: 0, totalSales: 0 };
+                  const line = Number(s.total) || ((Number(s.price) || 0) * (Number(s.quantity) || 0));
+                  entry.totalRevenue += line;
+                  entry.totalSales += sumQtyRequested ? (Number(s.quantity) || 0) : 1;
+                  byName.set(name, entry);
+                }
+                rows = Array.from(byName.values()).map(r => ({
+                  productName: r.productName,
+                  totalRevenue: r.totalRevenue,
+                  totalSales: r.totalSales
+                }));
+              }
+              // Sort: check if $sort totalRevenue desc requested, default to desc
+              rows = rows.sort((a, b) => (Number(b.totalRevenue) || 0) - (Number(a.totalRevenue) || 0));
+              // Limit
+              rows = rows.slice(0, limit);
+              results.push(rows);
+              continue;
+            }
+
+            return NextResponse.json({ error: `Unsupported operation: ${op} for ${coll}` }, { status: 400 });
+          }
+
+          return NextResponse.json({ success: true, results });
+        } catch (err) {
+          console.error('Mongo run error:', err);
+          return NextResponse.json({ error: 'Mongo execution failed', details: err instanceof Error ? err.message : String(err) }, { status: 500 });
+        }
+      }
       case 'run-sql':
         console.log('Executing SQL query...');
         const { sql } = await request.json();
@@ -1569,11 +1963,14 @@ export async function POST(request: Request) {
             }
 
             if (isUpdateProduct) {
-              // Expect: UPDATE products SET field = value, ... WHERE id = '...'
-              const whereMatch = normalized.match(/where\s+id\s*=\s*'([^']+)'/i);
+              // Expect patterns like:
+              // UPDATE products SET field = value, ... WHERE id = '...'
+              // or WHERE name = '...'
+              const whereMatchGeneral = normalized.match(/where\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*'([^']+)'/i);
               const setMatch = normalized.match(/set\s+(.+)\s+where/i);
-              if (!whereMatch || !setMatch) return NextResponse.json({ error: 'Unsupported SQL for MongoDB (UPDATE syntax)' }, { status: 400 });
-              const id = whereMatch[1];
+              if (!whereMatchGeneral || !setMatch) return NextResponse.json({ error: 'Unsupported SQL for MongoDB (UPDATE syntax)' }, { status: 400 });
+              const whereField = whereMatchGeneral[1].toLowerCase();
+              const whereValue = whereMatchGeneral[2];
               const assignments = setMatch[1].split(/,(?=(?:[^']*'[^']*')*[^']*$)/);
               const setDoc: Record<string, any> = { 'data.products.$[p].updatedAt': new Date().toISOString() };
               for (const a of assignments) {
@@ -1585,10 +1982,14 @@ export async function POST(request: Request) {
                 const value = /^\d+(\.\d+)?$/.test(valueRaw) ? Number(valueRaw) : valueRaw;
                 setDoc[`data.products.$[p].${key}`] = value;
               }
+              const arrayFilterField = whereField === 'id' ? 'id' : (whereField === 'name' ? 'name' : null);
+              if (!arrayFilterField) {
+                return NextResponse.json({ error: 'Only WHERE id or WHERE name supported for Mongo UPDATE' }, { status: 400 });
+              }
               const result = await db.collection('users').updateOne(
                 { userId },
                 { $set: setDoc },
-                { arrayFilters: [{ 'p.id': id }] }
+                { arrayFilters: [{ [`p.${arrayFilterField}`]: whereValue }] as any }
               );
               return NextResponse.json({ success: true, result });
             }

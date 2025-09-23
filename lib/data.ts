@@ -220,3 +220,10 @@ export async function runSqlQuery(sql: string) {
   console.log('[runSqlQuery] Executing:', sql);
   return postToApi('run-sql', { sql });
 }
+
+// Run MongoDB commands (shell-like strings) for Mongo-backed setups
+export async function runMongoQuery(commands: string[] | string) {
+  const cmdArray = Array.isArray(commands) ? commands : [commands];
+  console.log('[runMongoQuery] Executing:', cmdArray);
+  return postToApi('run-mongo', { commands: cmdArray });
+}

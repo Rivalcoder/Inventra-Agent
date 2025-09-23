@@ -8,7 +8,7 @@ import { SendHorizontal, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { runSqlQuery } from "@/lib/data";
+import { runSqlQuery, runMongoQuery } from "@/lib/data";
 import { Toggle } from "@/components/ui/toggle";
 
 interface QueryResult {
@@ -16,7 +16,9 @@ interface QueryResult {
     Topic: {
       Heading: string;
       Description: string;
+      Language?: 'sql' | 'mongodb';
       SqlQuery?: string[];
+      MongoQuery?: string[];
     };
   };
   type: string;
@@ -45,6 +47,7 @@ export default function QueryPage() {
   const [history, setHistory] = useState<string[]>([]);
   const { toast } = useToast();
   const [showSql, setShowSql] = useState(false); // NEW: toggle for SQL query
+  const [showMongo, setShowMongo] = useState(false); // NEW: toggle for Mongo query
 
   // Load history from localStorage on mount
   useEffect(() => {
@@ -129,11 +132,31 @@ export default function QueryPage() {
 
       setQuery(""); // Clear the input field after successful response
 
-      // --- NEW: Execute SQL if present and collect messages ---
+      // --- NEW: Execute DB query based on configured DB type and language ---
+      const dbConfigRaw = localStorage.getItem('databaseConfig');
+      let configuredDbType: 'mysql' | 'postgresql' | 'mongodb' | undefined;
+      try { configuredDbType = dbConfigRaw ? JSON.parse(dbConfigRaw)?.type : undefined; } catch {}
+      const language = data.response?.Topic?.Language as ('sql' | 'mongodb' | undefined);
       const sqlQueries = data.response?.Topic?.SqlQuery;
+      const steps = Array.isArray(data.response?.Topic?.Steps) ? data.response.Topic.Steps : null;
+      // Prefer structured Steps for multi-command execution
+      const mongoFromSteps = steps ? steps.map((s: any) => s?.Mongo).filter((v: any) => typeof v === 'string' && v.trim().length > 0) : [];
+      const mongoQueries = mongoFromSteps.length > 0 ? mongoFromSteps : data.response?.Topic?.MongoQuery;
       let dbChangeMessages: string[] = [];
       let dbHeadline: string | null = null;
-      if (Array.isArray(sqlQueries) && sqlQueries.length > 0) {
+      if ((configuredDbType === 'mongodb') && Array.isArray(mongoQueries) && mongoQueries.length > 0) {
+        try {
+          const execResult = await runMongoQuery(mongoQueries);
+          dbChangeMessages.push('Mongo command(s) executed successfully.');
+          dbHeadline = 'Mongo command(s) executed successfully.';
+          toast({ title: 'Database Updated', description: 'Mongo command(s) executed successfully.' });
+        } catch (err: any) {
+          const errMsg = 'Database error: ' + (err.message || 'Failed to execute Mongo command(s).');
+          dbChangeMessages.push(errMsg);
+          dbHeadline = errMsg;
+          toast({ title: 'Database Error', description: err.message || 'Failed to execute Mongo command(s).', variant: 'destructive' });
+        }
+      } else if ((configuredDbType !== 'mongodb') && Array.isArray(sqlQueries) && sqlQueries.length > 0) {
         for (const sql of sqlQueries) {
           try {
             const execResult = await runSqlQuery(sql);
@@ -357,6 +380,10 @@ export default function QueryPage() {
                         </div>
                       )}
                     </div>
+                    {/* Language badge */}
+                    {(result.data.Topic.Language || Array.isArray(result.data.Topic.MongoQuery)) && (
+                      <div className="mt-2 text-xs text-muted-foreground">Language: {result.data.Topic.Language || 'mongodb'}</div>
+                    )}
                     {/* SQL Query Toggle placed below all content */}
                     {Array.isArray(result.data.Topic.SqlQuery) && result.data.Topic.SqlQuery.length > 0 && (
                       <div className="mt-8">
@@ -370,6 +397,23 @@ export default function QueryPage() {
                         {showSql && (
                           <pre className="bg-muted rounded p-4 mt-2 text-xs overflow-x-auto border border-border">
                             {result.data.Topic.SqlQuery.join('\n\n')}
+                          </pre>
+                        )}
+                      </div>
+                    )}
+                    {/* Mongo Query Toggle */}
+                    {Array.isArray(result.data.Topic.MongoQuery) && result.data.Topic.MongoQuery.length > 0 && (
+                      <div className="mt-8">
+                        <Toggle
+                          pressed={showMongo}
+                          onPressedChange={setShowMongo}
+                          className="mb-2"
+                        >
+                          Show Mongo Command(s)
+                        </Toggle>
+                        {showMongo && (
+                          <pre className="bg-muted rounded p-4 mt-2 text-xs overflow-x-auto border border-border">
+                            {result.data.Topic.MongoQuery.join('\n\n')}
                           </pre>
                         )}
                       </div>
