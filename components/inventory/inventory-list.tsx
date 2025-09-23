@@ -25,6 +25,7 @@ import { formatCurrency } from "@/lib/utils";
 import { EditProductDialog } from "@/components/inventory/edit-product-dialog";
 import { DeleteProductDialog } from "@/components/inventory/delete-product-dialog";
 import { AddProductDialog } from "@/components/inventory/add-product-dialog";
+import ImportFromFile from "@/components/inventory/import-from-file";
 import { createProduct, postToApi } from "@/lib/data";
 import { useCurrency } from "@/lib/context/currency-context";
 
@@ -147,6 +148,7 @@ export function InventoryList({ initialProducts }: InventoryListProps) {
                   <SelectItem value="out">Out of Stock</SelectItem>
                 </SelectContent>
               </Select>
+              <ImportFromFile />
               <Button
                 variant="default"
                 size="icon"
