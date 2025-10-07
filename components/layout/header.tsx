@@ -2,7 +2,7 @@
 
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
-import { MoonIcon, SunIcon, UserIcon, Building2, LogOut } from "lucide-react";
+import { MoonIcon, SunIcon, UserIcon, Building2, LogOut, BookOpen } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +41,12 @@ export default function Header() {
   }, []);
 
   const loadSettings = async () => {
+    // Check if user is authenticated before making API calls
+    const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
+    if (!isAuthenticated) {
+      return;
+    }
+    
     try {
       const settings = await getSettings();
       const logoSetting = settings.find(s => s.setting_key === 'logo');
@@ -164,6 +170,12 @@ export default function Header() {
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/docs" className="flex items-center">
+                        <BookOpen className="mr-2 h-4 w-4" />
+                        <span>Documentation</span>
+                      </Link>
+                    </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link href="/settings" className="flex items-center">
                         <Building2 className="mr-2 h-4 w-4" />

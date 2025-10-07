@@ -16,6 +16,12 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     async function loadCurrency() {
+      // Check if user is authenticated before making API calls
+      const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
+      if (!isAuthenticated) {
+        return;
+      }
+      
       try {
         const settings = await getSettings();
         const currencySetting = settings.find((s: any) => s.setting_key === 'currency');

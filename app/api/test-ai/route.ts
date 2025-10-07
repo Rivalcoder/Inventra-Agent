@@ -9,7 +9,7 @@ export async function GET() {
     console.log('Testing AI API with key:', apiKey ? 'SET' : 'NOT SET');
     
     const { text } = await generateText({
-      model: google('gemini-2.0-flash-exp'),
+      model: google('gemini-2.5-flash-lite'),
       prompt: 'Say "Hello World"',
     });
 

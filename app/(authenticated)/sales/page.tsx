@@ -8,6 +8,7 @@ import { AddSaleDialog } from "@/components/sales/add-sale-dialog";
 import { useState, useEffect, useCallback } from "react";
 import { Sale } from "@/lib/types";
 import { toast } from "sonner";
+import ImportSales from "@/components/sales/import-sales";
 
 export default function SalesPage() {
   const [sales, setSales] = useState<Sale[]>([]);
@@ -59,10 +60,13 @@ export default function SalesPage() {
             View and manage your sales records
           </p>
         </div>
-        <Button onClick={() => setShowAddDialog(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Record Sale
-        </Button>
+        <div className="flex items-center gap-2">
+          <ImportSales />
+          <Button onClick={() => setShowAddDialog(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Record Sale
+          </Button>
+        </div>
       </div>
 
       <SalesList initialSales={sales} />

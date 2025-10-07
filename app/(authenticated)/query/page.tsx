@@ -8,7 +8,7 @@ import { SendHorizontal, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { runSqlQuery } from "@/lib/data";
+import { runSqlQuery, runMongoQuery } from "@/lib/data";
 import { Toggle } from "@/components/ui/toggle";
 
 interface QueryResult {
@@ -16,7 +16,9 @@ interface QueryResult {
     Topic: {
       Heading: string;
       Description: string;
+      Language?: 'sql' | 'mongodb';
       SqlQuery?: string[];
+      MongoQuery?: string[];
     };
   };
   type: string;
@@ -45,6 +47,7 @@ export default function QueryPage() {
   const [history, setHistory] = useState<string[]>([]);
   const { toast } = useToast();
   const [showSql, setShowSql] = useState(false); // NEW: toggle for SQL query
+  const [showMongo, setShowMongo] = useState(false); // NEW: toggle for Mongo query
 
   // Load history from localStorage on mount
   useEffect(() => {
@@ -86,6 +89,7 @@ export default function QueryPage() {
       try {
         const dbConfig = JSON.parse(databaseConfig);
         headers['x-user-db-config'] = JSON.stringify(dbConfig);
+        if (dbConfig?.userId) headers['x-user-id'] = String(dbConfig.userId);
       } catch (error) {
         toast({
           title: "Invalid Database Configuration",
@@ -128,26 +132,46 @@ export default function QueryPage() {
 
       setQuery(""); // Clear the input field after successful response
 
-      // --- NEW: Execute SQL if present and collect messages ---
+      // --- NEW: Execute DB query based on configured DB type and language ---
+      const dbConfigRaw = localStorage.getItem('databaseConfig');
+      let configuredDbType: 'mysql' | 'postgresql' | 'mongodb' | undefined;
+      try { configuredDbType = dbConfigRaw ? JSON.parse(dbConfigRaw)?.type : undefined; } catch {}
+      const language = data.response?.Topic?.Language as ('sql' | 'mongodb' | undefined);
       const sqlQueries = data.response?.Topic?.SqlQuery;
+      const steps = Array.isArray(data.response?.Topic?.Steps) ? data.response.Topic.Steps : null;
+      // Prefer structured Steps for multi-command execution
+      const mongoFromSteps = steps ? steps.map((s: any) => s?.Mongo).filter((v: any) => typeof v === 'string' && v.trim().length > 0) : [];
+      const mongoQueries = mongoFromSteps.length > 0 ? mongoFromSteps : data.response?.Topic?.MongoQuery;
       let dbChangeMessages: string[] = [];
       let dbHeadline: string | null = null;
-      if (Array.isArray(sqlQueries) && sqlQueries.length > 0) {
+      if ((configuredDbType === 'mongodb') && Array.isArray(mongoQueries) && mongoQueries.length > 0) {
+        try {
+          const execResult = await runMongoQuery(mongoQueries);
+          dbChangeMessages.push('Mongo command(s) executed successfully.');
+          dbHeadline = 'Mongo command(s) executed successfully.';
+          toast({ title: 'Database Updated', description: 'Mongo command(s) executed successfully.' });
+        } catch (err: any) {
+          const errMsg = 'Database error: ' + (err.message || 'Failed to execute Mongo command(s).');
+          dbChangeMessages.push(errMsg);
+          dbHeadline = errMsg;
+          toast({ title: 'Database Error', description: err.message || 'Failed to execute Mongo command(s).', variant: 'destructive' });
+        }
+      } else if ((configuredDbType !== 'mongodb') && Array.isArray(sqlQueries) && sqlQueries.length > 0) {
         for (const sql of sqlQueries) {
           try {
             const execResult = await runSqlQuery(sql);
             if (/^insert/i.test(sql)) {
-              dbChangeMessages.push("Product added successfully.");
-              dbHeadline = "Product added successfully.";
+              dbChangeMessages.push("Insert executed successfully.");
+              dbHeadline = "Insert executed successfully.";
             } else if (/^update/i.test(sql)) {
-              dbChangeMessages.push("Product updated successfully.");
-              dbHeadline = "Product updated successfully.";
+              dbChangeMessages.push("Update executed successfully.");
+              dbHeadline = "Update executed successfully.";
             } else if (/^delete/i.test(sql)) {
-              dbChangeMessages.push("Product deleted successfully.");
-              dbHeadline = "Product deleted successfully.";
+              dbChangeMessages.push("Delete executed successfully.");
+              dbHeadline = "Delete executed successfully.";
             } else {
-              dbChangeMessages.push("Database updated successfully.");
-              dbHeadline = "Database updated successfully.";
+              dbChangeMessages.push("Query executed successfully.");
+              dbHeadline = "Query executed successfully.";
             }
             toast({
               title: "Database Updated",
@@ -249,48 +273,48 @@ export default function QueryPage() {
                   {result.dbHeadline && (
                     <div className="text-green-700 text-2xl font-bold mb-4">{result.dbHeadline}</div>
                   )}
-                  <div className="bg-white rounded-lg shadow p-6">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                  <div className="bg-card rounded-lg shadow p-6 border border-border">
+                    <h2 className="text-2xl font-bold text-card-foreground mb-4">
                       {result.data.Topic.Heading}
                     </h2>
                     
                     <div className="space-y-4">
                       {result.data.Topic.Description && (
-                        <div className="text-gray-700 dark:text-gray-300 markdown-content">
+                        <div className="text-foreground markdown-content">
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             components={{
                               h3: ({ node, ...props }) => (
-                                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mt-6 mb-3" {...props} />
+                                <h3 className="text-lg font-medium text-foreground mt-6 mb-3" {...props} />
                               ),
                               p: ({ node, ...props }) => (
-                                <p className="text-sm text-gray-600 dark:text-gray-300 my-2" {...props} />
+                                <p className="text-sm text-foreground my-2" {...props} />
                               ),
                               table: ({ node, ...props }) => (
                                 <div className="overflow-x-auto my-4">
-                                  <table className="min-w-full border-collapse border border-gray-200 dark:border-gray-700" {...props} />
+                                  <table className="min-w-full border-collapse border border-border" {...props} />
                                 </div>
                               ),
                               th: ({ node, ...props }) => (
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700" {...props} />
+                                <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider bg-muted border border-border" {...props} />
                               ),
                               td: ({ node, ...props }) => (
-                                <td className="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap border border-gray-200 dark:border-gray-700" {...props} />
+                                <td className="px-4 py-2 text-sm text-foreground whitespace-nowrap border border-border" {...props} />
                               ),
                               tr: ({ node, ...props }) => (
-                                <tr className="hover:bg-gray-100 dark:hover:bg-gray-800/50" {...props} />
+                                <tr className="hover:bg-muted/50" {...props} />
                               ),
                               ul: ({ node, ...props }) => (
-                                <ul className="list-disc list-inside space-y-1 text-sm text-gray-600 dark:text-gray-300 my-2" {...props} />
+                                <ul className="list-disc list-inside space-y-1 text-sm text-foreground my-2" {...props} />
                               ),
                               ol: ({ node, ...props }) => (
-                                <ol className="list-decimal list-inside space-y-1 text-sm text-gray-600 dark:text-gray-300 my-2" {...props} />
+                                <ol className="list-decimal list-inside space-y-1 text-sm text-foreground my-2" {...props} />
                               ),
                               li: ({ node, ...props }) => (
-                                <li className="text-sm text-gray-600 dark:text-gray-300 my-1" {...props} />
+                                <li className="text-sm text-foreground my-1" {...props} />
                               ),
                               blockquote: ({ node, ...props }) => (
-                                <blockquote className="border-l-4 border-blue-500 pl-4 py-1 my-2 text-sm text-gray-600 dark:text-gray-300 italic" {...props} />
+                                <blockquote className="border-l-4 border-primary pl-4 py-1 my-2 text-sm text-foreground italic" {...props} />
                               ),
                             }}
                           >
@@ -307,21 +331,21 @@ export default function QueryPage() {
                             }
                             .markdown-content th,
                             .markdown-content td {
-                              border: 1px solid #e5e7eb;
+                              border: 1px solid hsl(var(--border));
                               padding: 0.5rem 1rem;
                               text-align: left;
                             }
                             .markdown-content th {
-                              background-color: #f9fafb;
+                              background-color: hsl(var(--muted));
                               font-weight: 500;
                               text-transform: uppercase;
                               font-size: 0.75rem;
                             }
                             .markdown-content tr:nth-child(even) {
-                              background-color: #f9fafb;
+                              background-color: hsl(var(--muted) / 0.5);
                             }
                             .markdown-content tr:hover {
-                              background-color: #f3f4f6;
+                              background-color: hsl(var(--muted) / 0.8);
                             }
                             .markdown-content h3 {
                               margin-top: 1.5rem;
@@ -343,32 +367,23 @@ export default function QueryPage() {
                             .markdown-content blockquote {
                               margin: 0.5rem 0;
                               padding-left: 1rem;
-                              border-left: 4px solid #3b82f6;
+                              border-left: 4px solid hsl(var(--primary));
                               font-style: italic;
-                            }
-                            .dark .markdown-content th,
-                            .dark .markdown-content td {
-                              border-color: #374151;
-                            }
-                            .dark .markdown-content th {
-                              background-color: #1f2937;
-                            }
-                            .dark .markdown-content tr:nth-child(even) {
-                              background-color: #1f2937;
-                            }
-                            .dark .markdown-content tr:hover {
-                              background-color: #374151;
                             }
                           `}</style>
                         </div>
                       )}
                       {/* Show explanation if present */}
                       {result.explanation && (
-                        <div className="text-gray-600 dark:text-gray-400 text-sm whitespace-pre-line">
+                        <div className="text-foreground text-sm whitespace-pre-line">
                           {result.explanation}
                         </div>
                       )}
                     </div>
+                    {/* Language badge */}
+                    {(result.data.Topic.Language || Array.isArray(result.data.Topic.MongoQuery)) && (
+                      <div className="mt-2 text-xs text-muted-foreground">Language: {result.data.Topic.Language || 'mongodb'}</div>
+                    )}
                     {/* SQL Query Toggle placed below all content */}
                     {Array.isArray(result.data.Topic.SqlQuery) && result.data.Topic.SqlQuery.length > 0 && (
                       <div className="mt-8">
@@ -380,8 +395,25 @@ export default function QueryPage() {
                           Show SQL Query
                         </Toggle>
                         {showSql && (
-                          <pre className="bg-gray-100 dark:bg-gray-800 rounded p-4 mt-2 text-xs overflow-x-auto">
+                          <pre className="bg-muted rounded p-4 mt-2 text-xs overflow-x-auto border border-border">
                             {result.data.Topic.SqlQuery.join('\n\n')}
+                          </pre>
+                        )}
+                      </div>
+                    )}
+                    {/* Mongo Query Toggle */}
+                    {Array.isArray(result.data.Topic.MongoQuery) && result.data.Topic.MongoQuery.length > 0 && (
+                      <div className="mt-8">
+                        <Toggle
+                          pressed={showMongo}
+                          onPressedChange={setShowMongo}
+                          className="mb-2"
+                        >
+                          Show Mongo Command(s)
+                        </Toggle>
+                        {showMongo && (
+                          <pre className="bg-muted rounded p-4 mt-2 text-xs overflow-x-auto border border-border">
+                            {result.data.Topic.MongoQuery.join('\n\n')}
                           </pre>
                         )}
                       </div>
@@ -412,7 +444,7 @@ export default function QueryPage() {
                         {historicalQuery}
                       </Button>
                       {/* Tooltip for full query on hover */}
-                      <div className="absolute left-0 z-10 hidden group-hover:block bg-white border border-gray-300 shadow-lg rounded p-2 text-xs max-w-xs max-h-40 overflow-y-auto whitespace-pre-wrap" style={{ top: '110%' }}>
+                      <div className="absolute left-0 z-10 hidden group-hover:block bg-popover border border-border shadow-lg rounded p-2 text-xs max-w-xs max-h-40 overflow-y-auto whitespace-pre-wrap text-popover-foreground" style={{ top: '110%' }}>
                         {historicalQuery}
                       </div>
                     </div>

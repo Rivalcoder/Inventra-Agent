@@ -6,7 +6,7 @@ import {
   TopProduct,
   Settings
 } from '@/lib/types';
-import { getApiBase } from './utils';
+import { getApiBase, normalizeDate } from './utils';
 import { ApiClient } from './utils/api-client';
 
 // Helper function to fetch data from API
@@ -21,6 +21,16 @@ async function fetchFromApi(endpoint: string, params: Record<string, string> = {
   } catch (error) {
     console.error('Error fetching data:', error);
     throw error;
+  }
+}
+
+// Client-side helper to detect if a DB config exists
+function hasClientDbConfig(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return !!(localStorage.getItem('databaseConfig') || localStorage.getItem('default_db_config'));
+  } catch {
+    return false;
   }
 }
 
@@ -59,7 +69,8 @@ export async function getSales(): Promise<Sale[]> {
     ...item,
     quantity: Number(item.quantity) || 0,
     price: Number(item.price) || 0,
-    total: Number(item.total) || 0
+    total: Number(item.total) || 0,
+    date: normalizeDate(item.date) // Ensure date is always present and valid
   }));
 }
 
@@ -79,6 +90,10 @@ export async function createSale(sale: Omit<Sale, 'id'>): Promise<Sale> {
     total: Number(sale.total)
   };
   return postToApi('sale', saleData);
+}
+
+export async function deleteSale(saleId: string): Promise<{ success: boolean }> {
+  return postToApi('delete-sale', { saleId });
 }
 
 // Dashboard data
@@ -118,7 +133,8 @@ export async function getRecentSales(): Promise<Sale[]> {
     ...item,
     price: Number(item.price) || 0,
     total: Number(item.total) || 0,
-    quantity: Number(item.quantity) || 0
+    quantity: Number(item.quantity) || 0,
+    date: normalizeDate(item.date) // Ensure date is always present and valid
   }));
 }
 
@@ -135,6 +151,10 @@ export async function getLowStockProducts(): Promise<Product[]> {
 // Settings operations
 export async function getSettings(): Promise<Settings[]> {
   try {
+    // Skip API call if no DB config yet (e.g., right after sign-in)
+    if (!hasClientDbConfig()) {
+      return [];
+    }
     const response = await fetchFromApi('settings', { action: 'settings' });
     console.log('getSettings response:', response);
     return response;
@@ -146,6 +166,10 @@ export async function getSettings(): Promise<Settings[]> {
 
 export async function getSetting(key: string): Promise<Settings | null> {
   try {
+    // Skip API call if no DB config yet
+    if (!hasClientDbConfig()) {
+      return null;
+    }
     const response = await fetchFromApi('setting', { action: 'setting', key });
     console.log('getSetting response:', response);
     return response;
@@ -195,4 +219,11 @@ export async function deleteSetting(key: string): Promise<{ success: boolean }> 
 export async function runSqlQuery(sql: string) {
   console.log('[runSqlQuery] Executing:', sql);
   return postToApi('run-sql', { sql });
+}
+
+// Run MongoDB commands (shell-like strings) for Mongo-backed setups
+export async function runMongoQuery(commands: string[] | string) {
+  const cmdArray = Array.isArray(commands) ? commands : [commands];
+  console.log('[runMongoQuery] Executing:', cmdArray);
+  return postToApi('run-mongo', { commands: cmdArray });
 }

@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import ImportFromFile from "@/components/inventory/import-from-file";
 import { AddProductDialog } from "@/components/inventory/add-product-dialog";
 import { Plus, File as FileExport, Import as FileImport } from "lucide-react";
 import { Product } from "@/lib/types";
@@ -35,21 +36,12 @@ export function InventoryActions() {
           <Plus className="mr-2 h-4 w-4" />
           Add Product
         </Button>
+        <ImportFromFile />
         <Button variant="outline" onClick={handleExport}>
           <FileExport className="mr-2 h-4 w-4" />
           Export
         </Button>
-        <Button variant="outline" onClick={handleImport}>
-          <FileImport className="mr-2 h-4 w-4" />
-          Import
-        </Button>
-        <Input
-          type="file"
-          ref={fileInputRef}
-          className="hidden"
-          accept=".csv,.xlsx"
-          onChange={handleFileUpload}
-        />
+        {/* Old CSV/XLSX importer kept for reference; replaced by AI importer */}
       </div>
 
       <AddProductDialog

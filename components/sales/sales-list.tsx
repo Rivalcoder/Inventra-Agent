@@ -18,7 +18,7 @@ import { formatCurrency, formatDate, convertToCSV, downloadCSV } from "@/lib/uti
 import { DeleteSaleDialog } from "@/components/sales/delete-sale-dialog";
 import { ViewSaleDialog } from "@/components/sales/view-sale-dialog";
 import { DateRangePicker } from "@/components/sales/date-range-picker";
-import { getSales } from "@/lib/data";
+import { getSales, deleteSale } from "@/lib/data";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -104,6 +104,7 @@ export function SalesList({ initialSales }: SalesListProps) {
 
   const handleDeleteSale = async (saleId: string) => {
     try {
+      await deleteSale(saleId);
       setSales(prevSales => prevSales.filter(sale => sale.id !== saleId));
       setDeletingSale(null);
     } catch (error) {

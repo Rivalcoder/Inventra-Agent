@@ -42,27 +42,28 @@ html, body {
 
 @layer base {
   :root {
-    --background: 220 20% 98%;
-    --foreground: 220 13% 18%;
-    --card: 0 0% 100%;
-    --card-foreground: 220 13% 18%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 13% 18%;
-    --primary: 245 100% 60%;
+    --background: 220 20% 95%;
+    --foreground: 220 13% 15%;
+    --card: 0 0% 98%;
+    --card-foreground: 220 13% 15%;
+    --popover: 0 0% 98%;
+    --popover-foreground: 220 13% 15%;
+    /* Switched primary/ring/accent to blue family for better visibility */
+    --primary: 217 91% 60%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 20% 96%;
-    --secondary-foreground: 220 13% 18%;
-    --muted: 220 20% 92%;
-    --muted-foreground: 220 13% 50%;
-    --accent: 245 100% 90%;
-    --accent-foreground: 245 100% 40%;
+    --secondary: 220 20% 94%;
+    --secondary-foreground: 220 13% 15%;
+    --muted: 220 20% 90%;
+    --muted-foreground: 220 13% 45%;
+    --accent: 217 91% 90%;
+    --accent-foreground: 217 91% 20%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 20% 90%;
-    --input: 220 20% 90%;
-    --ring: 245 100% 60%;
-    --chart-1: 245 100% 60%; /* Blue */
-    --chart-2: 160 80% 50%;  /* Green */
+    --border: 220 20% 88%;
+    --input: 220 20% 88%;
+    --ring: 217 91% 60%;
+    --chart-1: 217 91% 60%; /* Blue */
+    --chart-2: 191 97% 77%;  /* Sky */
     --chart-3: 45 100% 60%;  /* Yellow */
     --chart-4: 12 90% 65%;   /* Orange */
     --chart-5: 340 80% 65%;  /* Pink */
@@ -76,21 +77,21 @@ html, body {
     --card-foreground: 220 13% 98%;
     --popover: 220 13% 16%;
     --popover-foreground: 220 13% 98%;
-    --primary: 245 100% 60%;
+    --primary: 160 84% 39%;
     --primary-foreground: 0 0% 100%;
     --secondary: 220 13% 18%;
     --secondary-foreground: 220 13% 98%;
     --muted: 220 13% 20%;
     --muted-foreground: 220 13% 60%;
-    --accent: 245 100% 30%;
-    --accent-foreground: 245 100% 90%;
+    --accent: 162 66% 30%;
+    --accent-foreground: 162 66% 85%;
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
     --border: 220 13% 20%;
     --input: 220 13% 20%;
-    --ring: 245 100% 60%;
-    --chart-1: 245 100% 70%; /* Blue */
-    --chart-2: 160 80% 60%;  /* Green */
+    --ring: 160 84% 39%;
+    --chart-1: 160 84% 45%; /* Emerald */
+    --chart-2: 191 97% 70%;  /* Sky */
     --chart-3: 45 100% 70%;  /* Yellow */
     --chart-4: 12 90% 75%;   /* Orange */
     --chart-5: 340 80% 75%;  /* Pink */
@@ -109,6 +110,20 @@ html, body {
     font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
     font-weight: 700;
     letter-spacing: -0.01em;
+  }
+  
+  /* Improve text readability */
+  body {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  
+  .text-sm {
+    font-size: 13px;
+  }
+  
+  .text-xs {
+    font-size: 12px;
   }
   a {
     @apply text-primary;

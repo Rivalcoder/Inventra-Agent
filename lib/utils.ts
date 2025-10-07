@@ -18,13 +18,66 @@ export function formatCurrency(amount: number, currency: string = 'INR'): string
   ).format(amount);
 }
 
-export function formatDate(dateString: string): string {
-  const date = new Date(dateString);
+export function formatDate(dateString: string | Date | null | undefined): string {
+  if (!dateString) {
+    return 'N/A';
+  }
+  
+  let date: Date;
+  
+  // Handle different input types
+  if (dateString instanceof Date) {
+    date = dateString;
+  } else if (typeof dateString === 'string') {
+    // Handle various date string formats
+    if (dateString.includes('T')) {
+      // ISO string format
+      date = new Date(dateString);
+    } else if (dateString.includes('-')) {
+      // Date string format (YYYY-MM-DD)
+      date = new Date(dateString + 'T00:00:00');
+    } else {
+      // Try parsing as is
+      date = new Date(dateString);
+    }
+  } else {
+    return 'Invalid Date';
+  }
+  
+  // Check if the date is valid
+  if (isNaN(date.getTime())) {
+    console.warn('Invalid date provided to formatDate:', dateString);
+    return 'Invalid Date';
+  }
+  
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
   }).format(date);
+}
+
+// Helper function to validate and normalize dates
+export function normalizeDate(dateInput: any): string {
+  if (!dateInput) {
+    return new Date().toISOString();
+  }
+  
+  if (dateInput instanceof Date) {
+    return dateInput.toISOString();
+  }
+  
+  if (typeof dateInput === 'string') {
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) {
+      console.warn('Invalid date string, using current date:', dateInput);
+      return new Date().toISOString();
+    }
+    return date.toISOString();
+  }
+  
+  console.warn('Invalid date input, using current date:', dateInput);
+  return new Date().toISOString();
 }
 
 export function formatNumber(number: number): string {

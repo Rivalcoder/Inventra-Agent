@@ -20,8 +20,8 @@ export async function sendEmailNotification(notification: EmailNotification) {
     // TODO: Implement actual email sending logic here
     // For now, we'll just log the notification
     console.log('Sending email notification:', {
-      to: emailSettings,
-      ...notification
+      ...notification,
+      to: emailSettings
     });
 
     // Example implementation using a hypothetical email service:

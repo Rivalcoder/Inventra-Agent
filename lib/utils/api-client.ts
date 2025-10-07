@@ -3,14 +3,28 @@ export class ApiClient {
   private static getDatabaseConfig(): any {
     if (typeof window === 'undefined') return null;
     
-    // Try to get user's database configuration
+    // Prefer user's database configuration (current session choice)
     const userDbConfig = localStorage.getItem('databaseConfig');
     if (userDbConfig) {
       try {
-        return JSON.parse(userDbConfig);
+        const config = JSON.parse(userDbConfig);
+        console.log('Using user database config:', config);
+        return config;
       } catch (error) {
         console.error('Error parsing database config:', error);
         return null;
+      }
+    }
+    
+    // Fallback to admin database configuration (if explicitly set)
+    const adminDbConfig = localStorage.getItem('admin_db_config');
+    if (adminDbConfig) {
+      try {
+        const config = JSON.parse(adminDbConfig);
+        console.log('Using admin database config:', config);
+        return config;
+      } catch (error) {
+        console.error('Error parsing admin config:', error);
       }
     }
     
@@ -18,13 +32,16 @@ export class ApiClient {
     const defaultConfig = localStorage.getItem('default_db_config');
     if (defaultConfig) {
       try {
-        return JSON.parse(defaultConfig);
+        const config = JSON.parse(defaultConfig);
+        console.log('Using default database config:', config);
+        return config;
       } catch (error) {
         console.error('Error parsing default config:', error);
         return null;
       }
     }
     
+    console.log('No database configuration found');
     return null;
   }
 
@@ -37,6 +54,38 @@ export class ApiClient {
     const dbConfig = this.getDatabaseConfig();
     if (dbConfig) {
       headers['x-user-db-config'] = JSON.stringify(dbConfig);
+      console.log('Added database config to headers');
+      
+      // Add userId if available in config
+      if (dbConfig.userId) {
+        headers['x-user-id'] = dbConfig.userId;
+        console.log('Added userId to headers:', dbConfig.userId);
+      }
+    } else {
+      console.log('No database config available for headers');
+    }
+
+    // Also try to get userId from userData
+    if (typeof window !== 'undefined') {
+      const userData = localStorage.getItem('userData');
+      if (userData) {
+        try {
+          const user = JSON.parse(userData);
+          if (user.userId) {
+            headers['x-user-id'] = user.userId;
+            console.log('Added userId from userData to headers:', user.userId);
+          }
+        } catch (error) {
+          console.error('Error parsing userData:', error);
+        }
+      }
+
+      // Fallback: use a locally stored username as userId for per-user scoping
+      const currentUsername = localStorage.getItem('currentUsername');
+      if (currentUsername && !headers['x-user-id']) {
+        headers['x-user-id'] = currentUsername;
+        console.log('Added userId from currentUsername to headers:', currentUsername);
+      }
     }
 
     return headers;
