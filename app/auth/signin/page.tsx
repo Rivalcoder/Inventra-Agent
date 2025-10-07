@@ -57,7 +57,7 @@ class LocalAuthService {
       if (!existingUser) {
         this.users.push(demoUser);
       }
-    });
+    }); 
     
     // Save updated users list
     localStorage.setItem('local_users', JSON.stringify(this.users));
