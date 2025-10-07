@@ -334,7 +334,7 @@ export default function SignInPage() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.3, delay: 0.1 }}
             >
-              <Card className="border-0 shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20 h-full">
+              <Card className="border-0 shadow-2xl bg-white/10 backdrop-blur-xl border-white/20 h-full">
                 <CardHeader>
                   <CardTitle className="text-white text-xl flex items-center">
                     <Settings className="w-6 h-6 mr-3" />
@@ -442,7 +442,7 @@ export default function SignInPage() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.3, delay: 0.2 }}
             >
-              <Card className="border-0 shadow-2xl bg-white/10 backdrop-blur-xl border border-white/20 h-full">
+              <Card className="border-0 shadow-2xl bg-white/10 backdrop-blur-xl  border-white/20 h-full">
                 <CardHeader>
                   <CardTitle className="text-white text-xl flex items-center">
                     <Lock className="w-6 h-6 mr-3" />
