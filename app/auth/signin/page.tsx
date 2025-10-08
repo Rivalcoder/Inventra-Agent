@@ -62,7 +62,7 @@ class LocalAuthService {
       if (!existingUser) {
         this.users.push(demoUser);
       }
-    });
+    }); 
     
     // Save updated users list (client only)
     if (typeof window !== 'undefined') {
