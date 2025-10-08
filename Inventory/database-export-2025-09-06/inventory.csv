@@ -1,0 +1,6 @@
+id,name,description,price,quantity,category,createdAt,updatedAt
+1,Laptop Pro,High-performance laptop for professionals,1299.99,,Electronics,2025-09-06T10:43:57.000Z,2025-09-06T10:43:57.000Z
+2,Wireless Mouse,Ergonomic wireless mouse with long battery life,29.99,,Accessories,2025-09-06T10:43:57.000Z,2025-09-06T10:43:57.000Z
+3,USB-C Dock,All-in-one docking station with multiple ports,89.99,,Accessories,2025-09-06T10:43:57.000Z,2025-09-06T10:43:57.000Z
+4,4K Monitor,32-inch 4K UHD display with HDR,499.99,,Electronics,2025-09-06T10:43:57.000Z,2025-09-06T10:43:57.000Z
+5,Mechanical Keyboard,RGB mechanical keyboard with customizable keys,149.99,,Accessories,2025-09-06T10:43:57.000Z,2025-09-06T10:43:57.000Z
