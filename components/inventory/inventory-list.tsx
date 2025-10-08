@@ -31,9 +31,10 @@ import { useCurrency } from "@/lib/context/currency-context";
 
 interface InventoryListProps {
   initialProducts: Product[];
+  onRefresh?: () => void;
 }
 
-export function InventoryList({ initialProducts }: InventoryListProps) {
+export function InventoryList({ initialProducts, onRefresh }: InventoryListProps) {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -148,7 +149,7 @@ export function InventoryList({ initialProducts }: InventoryListProps) {
                   <SelectItem value="out">Out of Stock</SelectItem>
                 </SelectContent>
               </Select>
-              <ImportFromFile />
+              <ImportFromFile onProductsAdded={onRefresh} />
               <Button
                 variant="default"
                 size="icon"

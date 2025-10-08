@@ -8,7 +8,11 @@ import { AddProductDialog } from "@/components/inventory/add-product-dialog";
 import { Plus, File as FileExport, Import as FileImport } from "lucide-react";
 import { Product } from "@/lib/types";
 
-export function InventoryActions() {
+interface InventoryActionsProps {
+  onProductsAdded?: () => void;
+}
+
+export function InventoryActions({ onProductsAdded }: InventoryActionsProps = {}) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -36,7 +40,7 @@ export function InventoryActions() {
           <Plus className="mr-2 h-4 w-4" />
           Add Product
         </Button>
-        <ImportFromFile />
+        <ImportFromFile onProductsAdded={onProductsAdded} />
         <Button variant="outline" onClick={handleExport}>
           <FileExport className="mr-2 h-4 w-4" />
           Export
