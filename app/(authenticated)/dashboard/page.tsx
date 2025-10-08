@@ -17,7 +17,7 @@ import { formatCurrency, formatNumber } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useNotifications } from "@/lib/context/notification-context";
-import { LoadingOverlay } from "@/components/ui/loading-overlay";
+import { FullPageLoading } from "@/components/ui/loading-overlay";
 import {
   LineChart,
   Line,
@@ -144,7 +144,7 @@ export default function Dashboard() {
 
   return (
     <>
-      <LoadingOverlay isLoading={loading} />
+      <FullPageLoading isLoading={loading} message="Loading Dashboard..." />
       <div className="px-2 py-6 md:px-8 md:py-10 max-w-7xl mx-auto w-full space-y-8">
         <h1 className="text-4xl font-extrabold tracking-tight mb-2">Dashboard</h1>
         {/* Stats Cards */}
